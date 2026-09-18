@@ -15,7 +15,7 @@ dotenv.config();
 const server = new Server(
   {
     name: 'vps-mcp',
-    version: '8.0.0',
+    version: '9.0.0',
   },
   {
     capabilities: {
@@ -710,7 +710,59 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['directory']
         }
       }
+
+      ,{
+        name: 'manage_swap',
+        description: 'Manage VPS swap space (create, remove, show) to prevent Out-Of-Memory (OOM) crashes.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['show', 'create', 'remove'] },
+            size: { type: 'string', description: 'Size of swap to create (e.g., "2G", "1024M")' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'diagnose_network',
+        description: 'Run network diagnostic tools (ping, traceroute, dig) from the VPS.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            tool: { type: 'string', enum: ['ping', 'traceroute', 'dig'] },
+            target: { type: 'string', description: 'Domain or IP address' },
+            connectionName: { type: 'string' }
+          },
+          required: ['tool', 'target']
+        }
+      },
+      {
+        name: 'inspect_process',
+        description: 'Inspect open files and connections for a specific PID using lsof.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            pid: { type: 'string', description: 'Process ID to inspect' },
+            connectionName: { type: 'string' }
+          },
+          required: ['pid']
+        }
+      },
+      {
+        name: 'manage_power',
+        description: 'Control power state of the VPS (reboot, shutdown, uptime).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['reboot', 'shutdown', 'uptime'] },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      }
     ],
+
 
 
 
@@ -1304,7 +1356,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Disk Usage Analysis:\n\n${result.stdout}\n${result.stderr}` }] };
       }
+
+      case 'manage_swap': {
+        const args = z.object({ action: z.enum(['show', 'create', 'remove']), size: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'show') {
+            cmd = `sudo swapon --show && free -h`;
+        } else if (args.action === 'create') {
+            if (!args.size) throw new McpError(ErrorCode.InvalidParams, "size required for create (e.g., '2G')");
+            cmd = `sudo fallocate -l ${args.size} /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab`;
+        } else if (args.action === 'remove') {
+            cmd = `sudo swapoff -v /swapfile && sudo rm -f /swapfile && sudo sed -i '/\/swapfile/d' /etc/fstab`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `Swap ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'diagnose_network': {
+        const args = z.object({ tool: z.enum(['ping', 'traceroute', 'dig']), target: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.tool === 'ping') cmd = `ping -c 4 ${args.target}`;
+        else if (args.tool === 'traceroute') cmd = `traceroute ${args.target}`;
+        else if (args.tool === 'dig') cmd = `dig ${args.target}`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Network Diagnostics (${args.tool}):\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'inspect_process': {
+        const args = z.object({ pid: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = `sudo lsof -p ${args.pid}`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Process Inspection (PID ${args.pid}):\n\n${result.stdout || 'No open files or process not found'}\n${result.stderr}` }] };
+      }
+
+      case 'manage_power': {
+        const args = z.object({ action: z.enum(['reboot', 'shutdown', 'uptime']), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'reboot') cmd = `sudo reboot`;
+        else if (args.action === 'shutdown') cmd = `sudo shutdown -h now`;
+        else if (args.action === 'uptime') cmd = `uptime -p && uptime`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `Power Command (${args.action}):\n\n${result.stdout || 'Success'}\n${result.stderr}` }] };
+      }
       default:
+
 
 
 
