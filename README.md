@@ -94,10 +94,22 @@ All tools support an optional `connectionName` parameter to route commands when 
 
 ---
 
-## ⚙️ Usage
+## 🔌 Universal AI Compatibility
 
-Add the following configuration to your MCP client (e.g., Claude Desktop config file):
+This server is built on the official **Model Context Protocol (MCP)** standard using standard `stdio` transport. This means it is entirely LLM-agnostic and will seamlessly plug into almost any modern AI assistant, IDE, or CLI tool!
 
+**Natively Supported Clients:**
+- **Antigravity** (Google)
+- **Claude Desktop** & **Claude Code (CLI)**
+- **Cursor IDE** & **Windsurf**
+- **Qwen** & Alibaba AI Agents
+- **Codex** & OpenAI MCP Adapters
+- **Any custom CLI** that supports the MCP `stdio` protocol!
+
+### Example Configurations
+
+**For UI Clients (Claude Desktop, Cursor, Antigravity, etc.):**
+Add this to your MCP configuration JSON:
 ```json
 {
   "mcpServers": {
@@ -108,6 +120,13 @@ Add the following configuration to your MCP client (e.g., Claude Desktop config 
   }
 }
 ```
+
+**For CLI Clients (Claude Code, Custom CLIs):**
+Many CLI tools allow you to pass the server directly as a sub-process argument or via npx:
+```bash
+npx -y vps-mcp
+```
+*(The server runs headlessly and routes all tool requests instantly via standard input/output).*
 
 ## 💖 Support
 
