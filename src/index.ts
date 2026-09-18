@@ -15,7 +15,7 @@ dotenv.config();
 const server = new Server(
   {
     name: 'vps-mcp',
-    version: '9.0.0',
+    version: '10.0.0',
   },
   {
     capabilities: {
@@ -761,7 +761,54 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['action']
         }
       }
+
+      ,{
+        name: 'test_network_speed',
+        description: 'Run a bandwidth speed test from the VPS (Download/Upload speed).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            connectionName: { type: 'string' }
+          }
+        }
+      },
+      {
+        name: 'check_public_ip',
+        description: 'Fetch the public IP address and GeoIP location of the VPS.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            connectionName: { type: 'string' }
+          }
+        }
+      },
+      {
+        name: 'scan_ports',
+        description: 'Scan open ports on a target IP or domain using netcat.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            target: { type: 'string', description: 'Target domain or IP' },
+            ports: { type: 'string', description: 'Port range (e.g., "80,443" or "1-1000")' },
+            connectionName: { type: 'string' }
+          },
+          required: ['target']
+        }
+      },
+      {
+        name: 'lookup_whois',
+        description: 'Perform a WHOIS lookup on a domain.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            domain: { type: 'string', description: 'Domain name' },
+            connectionName: { type: 'string' }
+          },
+          required: ['domain']
+        }
+      }
     ],
+
 
 
 
@@ -1398,7 +1445,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await getClient(args.connectionName).executeCommand(cmd, true);
         return { content: [{ type: 'text', text: `Power Command (${args.action}):\n\n${result.stdout || 'Success'}\n${result.stderr}` }] };
       }
+
+      case 'test_network_speed': {
+        const args = z.object({ connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = `curl -sL https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Speed Test Results:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'check_public_ip': {
+        const args = z.object({ connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = `curl -s ipinfo.io/json`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Public IP Info:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'scan_ports': {
+        const args = z.object({ target: z.string(), ports: z.string().default('21 22 25 53 80 110 143 443 465 587 993 995 3306 5432 8080'), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const portStr = args.ports.replace(/,/g, ' ');
+        const cmd = `nc -zvw1 ${args.target} ${portStr} 2>&1 | grep -E "succeeded|open" || echo "No open ports found from the list"`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Port Scan Results for ${args.target}:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'lookup_whois': {
+        const args = z.object({ domain: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = `whois ${args.domain}`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `WHOIS Lookup (${args.domain}):\n\n${result.stdout}\n${result.stderr}` }] };
+      }
       default:
+
 
 
 

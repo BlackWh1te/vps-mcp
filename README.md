@@ -1,4 +1,4 @@
-# VPS MCP Server (v9.0.0 - Ultimate Edition)
+# VPS MCP Server (v10.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -75,11 +75,17 @@ All tools support an optional `connectionName` parameter to route commands when 
 - **`search_files`**: Deep search for files wrapping `find` and `grep` natively. Search by filename patterns (`*.ts`) or scan directory contents for regex strings without worrying about bash escaping rules.
 - **`analyze_disk_usage`**: Wraps `du -sh` to instantly figure out what is consuming disk space on the server. Analyze by depth and dynamically sort output to hunt down huge log files or docker images!
 
-### 🏥 10. Reliability & Diagnostics Suite (NEW!)
+### 🏥 10. Reliability & Diagnostics Suite
 - **`manage_swap`**: Does your tiny 1GB VPS crash when compiling Node apps or running Docker? Instantly create, enable, or remove swapfiles (e.g., `2G`) natively! 
 - **`diagnose_network`**: Server offline? DNS issues? Instantly run `ping`, `traceroute`, or `dig` natively to figure out where connections are failing.
 - **`inspect_process`**: Wraps `lsof` to securely inspect exactly which files, ports, and connections a specific process (PID) is locking or interacting with.
 - **`manage_power`**: Natively run safe `reboot`, `shutdown`, or `uptime` commands to manage the physical/virtual state of your VPS node.
+
+### 📡 11. Network & ISP Suite (NEW!)
+- **`test_network_speed`**: Dynamically downloads and executes `speedtest-cli` to benchmark your server's exact Upload and Download bandwidth speeds against nearby speedtest nodes.
+- **`check_public_ip`**: Fetches the precise Public IP address and associated Geo-IP location metrics (ISP, City, Country, Org) of the VPS node.
+- **`scan_ports`**: Penetration testing and firewall auditing straight from the server! Quickly scan open ports on external targets (or `localhost`) using `netcat`.
+- **`lookup_whois`**: Perform native WHOIS lookups to trace domain registrations directly from the VPS shell.
 
 ---
 
