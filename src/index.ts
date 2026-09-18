@@ -15,7 +15,7 @@ dotenv.config();
 const server = new Server(
   {
     name: 'vps-mcp',
-    version: '5.0.0',
+    version: '6.0.0',
   },
   {
     capabilities: {
@@ -578,7 +578,53 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['action']
         }
       }
+
+      ,{
+        name: 'manage_packages',
+        description: 'Install, remove, or update OS-level packages (apt, yum, apk).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            manager: { type: 'string', enum: ['apt', 'yum', 'apk'] },
+            action: { type: 'string', enum: ['install', 'remove', 'update', 'upgrade'] },
+            packages: { type: 'string', description: 'Space-separated list of packages (e.g., "git curl")' },
+            connectionName: { type: 'string' }
+          },
+          required: ['manager', 'action']
+        }
+      },
+      {
+        name: 'run_background_job',
+        description: 'Run, list, or kill background processes using tmux.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['start', 'list', 'kill', 'logs'] },
+            jobId: { type: 'string', description: 'Unique name for the background job/session' },
+            command: { type: 'string', description: 'Command to run in background (for start)' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'dump_database',
+        description: 'Securely create a database dump/backup (MySQL or PostgreSQL).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            dbType: { type: 'string', enum: ['mysql', 'postgres'] },
+            dbName: { type: 'string', description: 'Database to backup' },
+            outputFile: { type: 'string', description: 'Absolute path to save the backup file on the VPS' },
+            user: { type: 'string', description: 'Database user' },
+            password: { type: 'string', description: 'Database password' },
+            connectionName: { type: 'string' }
+          },
+          required: ['dbType', 'dbName', 'outputFile']
+        }
+      }
     ],
+
 
 
   };
@@ -1018,7 +1064,65 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await getClient(args.connectionName).executeCommand(cmd, true);
         return { content: [{ type: 'text', text: `PyTest ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
       }
+
+      case 'manage_packages': {
+        const args = z.object({ manager: z.enum(['apt', 'yum', 'apk']), action: z.enum(['install', 'remove', 'update', 'upgrade']), packages: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        const mngr = args.manager === 'apt' ? 'apt-get' : args.manager;
+        const autoYes = args.manager === 'apk' ? '' : '-y';
+        
+        if (args.action === 'update' || args.action === 'upgrade') {
+            cmd = `sudo ${mngr} ${args.action} ${autoYes}`;
+        } else {
+            if (!args.packages) throw new McpError(ErrorCode.InvalidParams, "packages required for install/remove");
+            cmd = `sudo ${mngr} ${args.action} ${autoYes} ${args.packages}`;
+        }
+        
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `Package Manager Output:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'run_background_job': {
+        const args = z.object({ action: z.enum(['start', 'list', 'kill', 'logs']), jobId: z.string().optional(), command: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        
+        if (args.action === 'list') {
+            cmd = `tmux ls`;
+        } else {
+            if (!args.jobId) throw new McpError(ErrorCode.InvalidParams, "jobId required");
+            if (args.action === 'start') {
+                if (!args.command) throw new McpError(ErrorCode.InvalidParams, "command required to start");
+                cmd = `tmux new-session -d -s "${args.jobId}" '${args.command}'`;
+            } else if (args.action === 'kill') {
+                cmd = `tmux kill-session -t "${args.jobId}"`;
+            } else if (args.action === 'logs') {
+                cmd = `tmux capture-pane -t "${args.jobId}" -p`;
+            }
+        }
+        
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Background Job ${args.action}:\n\n${result.stdout || 'Success'}\n${result.stderr}` }] };
+      }
+
+      case 'dump_database': {
+        const args = z.object({ dbType: z.enum(['mysql', 'postgres']), dbName: z.string(), outputFile: z.string(), user: z.string().optional(), password: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        
+        if (args.dbType === 'mysql') {
+            const u = args.user ? `-u ${args.user}` : '';
+            const p = args.password ? `-p${args.password}` : '';
+            cmd = `mysqldump ${u} ${p} ${args.dbName} > "${args.outputFile}"`;
+        } else {
+            const u = args.user ? `-U ${args.user}` : '';
+            const passEnv = args.password ? `PGPASSWORD='${args.password}' ` : '';
+            cmd = `${passEnv}pg_dump ${u} -d ${args.dbName} -F c -f "${args.outputFile}"`;
+        }
+        
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Database Dump:\n\n${result.stdout || 'Successfully dumped ' + args.dbName + ' to ' + args.outputFile}\n${result.stderr}` }] };
+      }
       default:
+
 
 
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);

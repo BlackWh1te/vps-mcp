@@ -1,4 +1,4 @@
-# VPS MCP Server (v5.0.0 - Ultimate Edition)
+# VPS MCP Server (v6.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -32,6 +32,7 @@ All tools support an optional `connectionName` parameter to route commands when 
 
 ### 💻 3. Command Execution & Tunneling
 - **`execute_command`**: Run bash commands natively. Supports `usePty` for interactive shell allocation.
+- **`run_background_job`**: Use `tmux` seamlessly behind the scenes to launch, list, kill, or tail logs of long-running background daemons.
 - **`start_port_forward`**: Start a local TCP port forward to a remote destination (acts like `ssh -L`).
 - **`stop_port_forward`**: Stop an active port forward.
 
@@ -40,6 +41,7 @@ All tools support an optional `connectionName` parameter to route commands when 
 - **`get_hardware_info`**: Fetch deep hardware metrics via `lscpu`, `free -m`, `lsblk`, and `lspci`.
 - **`get_processes`**: A native Task Manager! Fetches top running processes sorted by CPU or RAM.
 - **`get_network_stats`**: View active network connections and listening ports via `ss -tulpn`.
+- **`manage_packages`**: Automate OS package managers (`apt`, `yum`, `apk`) to install, remove, or upgrade system packages securely.
 - **`manage_service`**: Wrap `systemctl` to start, stop, restart, or enable background services.
 - **`manage_firewall`**: Wrap `ufw` to allow/deny specific ports and protocols.
 - **`read_system_logs`**: Hook into `journalctl` to safely tail system or service logs without freezing the console.
@@ -52,6 +54,7 @@ All tools support an optional `connectionName` parameter to route commands when 
 ### 🚀 6. Developer Ops (Docker & Databases)
 - **`manage_docker`**: Natively list containers, start/stop/restart them, inspect configs, or securely tail logs.
 - **`execute_sql`**: Execute raw SQL queries securely. Supports **MySQL**, **PostgreSQL**, and **SQLite**.
+- **`dump_database`**: Generate `.sql` or Postgres backup dumps instantly utilizing native `mysqldump` / `pg_dump` securely via the MCP.
 - **`manage_redis`**: Interface natively with Redis instances. Fetch keys, set/get values, flush DBs, or pass raw `redis-cli` commands.
 
 ### 📦 7. Language Environments (Node/Python/Git)
