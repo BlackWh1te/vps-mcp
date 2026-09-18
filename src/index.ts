@@ -15,7 +15,7 @@ dotenv.config();
 const server = new Server(
   {
     name: 'vps-mcp',
-    version: '10.0.0',
+    version: '11.0.0',
   },
   {
     capabilities: {
@@ -810,7 +810,51 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['domain']
         }
       }
+
+      ,{
+        name: 'manage_ssh_keys',
+        description: 'Manage SSH keypairs on the VPS (generate, read public key). Useful for Git authentication.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['generate', 'get_public'] },
+            type: { type: 'string', enum: ['ed25519', 'rsa'], default: 'ed25519' },
+            comment: { type: 'string', description: 'Comment for the key (e.g. user@vps)' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'patch_file',
+        description: 'Apply a unified diff (.patch) to a file on the VPS.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Absolute path to the target file to patch' },
+            patchContent: { type: 'string', description: 'The unified diff content to apply' },
+            connectionName: { type: 'string' }
+          },
+          required: ['path', 'patchContent']
+        }
+      },
+      {
+        name: 'manage_environment',
+        description: 'Manage environment variables in ~/.bashrc or /etc/environment.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['add', 'remove'] },
+            key: { type: 'string', description: 'Environment variable name (e.g. PATH or API_KEY)' },
+            value: { type: 'string', description: 'Value to set (for add)' },
+            global: { type: 'boolean', description: 'If true, applies to /etc/environment instead of ~/.bashrc' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action', 'key']
+        }
+      }
     ],
+
 
 
 
@@ -1495,7 +1539,47 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `WHOIS Lookup (${args.domain}):\n\n${result.stdout}\n${result.stderr}` }] };
       }
+
+      case 'manage_ssh_keys': {
+        const args = z.object({ action: z.enum(['generate', 'get_public']), type: z.enum(['ed25519', 'rsa']).default('ed25519'), comment: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        const keyPath = `~/.ssh/id_${args.type}`;
+        if (args.action === 'generate') {
+            const commentFlag = args.comment ? `-C "${args.comment}"` : '';
+            cmd = `mkdir -p ~/.ssh && chmod 700 ~/.ssh && ssh-keygen -t ${args.type} -f ${keyPath} -N "" ${commentFlag}`;
+        } else if (args.action === 'get_public') {
+            cmd = `cat ${keyPath}.pub`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `SSH Key ${args.action}:\n\n${result.stdout || 'Success'}\n${result.stderr}` }] };
+      }
+
+      case 'patch_file': {
+        const args = z.object({ path: z.string(), patchContent: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const b64 = Buffer.from(args.patchContent).toString('base64');
+        const cmd = `echo "${b64}" | base64 -d | patch "${args.path}"`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Patch Results:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_environment': {
+        const args = z.object({ action: z.enum(['add', 'remove']), key: z.string(), value: z.string().optional(), global: z.boolean().default(false), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const targetFile = args.global ? '/etc/environment' : '~/.bashrc';
+        const sudo = args.global ? 'sudo ' : '';
+        let cmd = '';
+        if (args.action === 'remove') {
+            cmd = `${sudo}sed -i '/^export ${args.key}=/d' ${targetFile} && ${sudo}sed -i '/^${args.key}=/d' ${targetFile}`;
+        } else if (args.action === 'add') {
+            if (!args.value) throw new McpError(ErrorCode.InvalidParams, "value is required for add");
+            const prefix = args.global ? '' : 'export ';
+            const exportStr = `${prefix}${args.key}="${args.value.replace(/"/g, '\\"')}"`;
+            cmd = `${sudo}sed -i '/^${prefix}${args.key}=/d' ${targetFile} && echo '${exportStr}' | ${sudo}tee -a ${targetFile}`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Environment ${args.action}:\n\n${result.stdout || 'Successfully updated ' + targetFile}\n${result.stderr}` }] };
+      }
       default:
+
 
 
 

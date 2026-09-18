@@ -1,4 +1,4 @@
-# VPS MCP Server (v10.0.0 - Ultimate Edition)
+# VPS MCP Server (v11.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -10,6 +10,11 @@ What started as a simple SSH wrapper has evolved into a **fully-fledged Systems 
 - **Native SFTP Tooling**: Bypass clunky bash commands for file transfers. Supports deep SFTP operations like Posix renames, symlinks, truncation, permissions, and local <-> remote transfers.
 - **Paramiko-Equivalent Functionality**: Features advanced SSH protocol capabilities including local port forwarding, Agent Forwarding, and interactive PTY allocation.
 - **Developer-Ready Suites**: Natively manage Git, Docker, Node.js (NVM/NPM/PM2), Python (Venv/PyTest), SQL Databases, and Local AI (Ollama) securely via structured schemas.
+
+### 🛠️ 12. Systems & SSH Expansion Suite (NEW!)
+- **manage_ssh_keys**: Automatically generate and retrieve RSA or Ed25519 SSH keys directly on the VPS. Perfect for linking your VPS securely to GitHub or GitLab.
+- **patch_file**: Apply native Unified Diffs (.patch) directly to source files on the server using the Unix patch command without overwriting the entire file.
+- **manage_environment**: Safely inject or remove exported environment variables (like API Keys or $PATH extensions) directly into ~/.bashrc or globally via /etc/environment.
 
 ---
 
