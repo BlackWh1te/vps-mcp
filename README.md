@@ -1,4 +1,4 @@
-# VPS MCP Server (v18.0.0 - Ultimate Edition)
+# VPS MCP Server (v19.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -57,6 +57,16 @@ pm run lint, ANALYZE=true npm run build for Webpack bundle analysis, and a dedic
 px shadcn-ui@latest add <component>.
 - **manage_npm**: Existing, but fully featured NPM manager for install, install_global, udit, and 
 un_script.
+
+### ⚡ 19. The Fullstack WebDev Suite (NEW!)
+- **manage_pnpm**: Full support for pnpm, the insanely fast, disk-efficient package manager taking over the Next.js and Monorepo ecosystem. Run install, dd, 
+emove, and store_prune natively.
+- **manage_drizzle**: The modern alternative to Prisma. Automatically execute 
+px drizzle-kit generate, push, migrate, and even launch the studio headlessly over SSH to manage your schema.
+- **manage_vite**: Perfect for React, Vue, and Svelte SPAs. Triggers highly optimized uild and preview workflows.
+- **manage_linter**: Code messy? Trigger this tool to instantly blanket your entire project with 
+px eslint . --fix or 
+px prettier --write ..
 
 ---
 

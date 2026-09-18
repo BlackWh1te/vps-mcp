@@ -1053,7 +1053,62 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['path']
         }
       }
+
+      ,{
+        name: 'manage_pnpm',
+        description: 'Manage packages using pnpm (the faster, strictly-linked, disk-efficient alternative to npm).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['install', 'add', 'remove', 'run_script', 'store_prune'] },
+            target: { type: 'string', description: 'Package name or script name' },
+            path: { type: 'string', description: 'Directory to run pnpm in' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'manage_drizzle',
+        description: 'Manage Drizzle ORM (generate, push, migrate). The modern alternative to Prisma.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['generate', 'push', 'migrate', 'studio'] },
+            path: { type: 'string' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'manage_linter',
+        description: 'Run ESLint or Prettier to instantly automatically format and fix code style in a directory.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            tool: { type: 'string', enum: ['eslint', 'prettier'] },
+            path: { type: 'string', description: 'Directory to format' },
+            connectionName: { type: 'string' }
+          },
+          required: ['tool', 'path']
+        }
+      },
+      {
+        name: 'manage_vite',
+        description: 'Manage Vite.js projects (React, Vue, Svelte SPAs).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['build', 'preview'] },
+            path: { type: 'string' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action', 'path']
+        }
+      }
     ],
+
 
 
 
@@ -1996,7 +2051,49 @@ ${result.stderr}` }] };
 ${result.stdout}
 ${result.stderr}` }] };
       }
+
+      case 'manage_pnpm': {
+        const args = z.object({ action: z.enum(['install', 'add', 'remove', 'run_script', 'store_prune']), target: z.string().optional(), path: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = args.path ? `cd ${escapeShellArg(args.path)} && ${NVM_SOURCE} ` : `${NVM_SOURCE} `;
+        if (args.action === 'install') cmd += `pnpm install`;
+        else if (args.action === 'add') cmd += `pnpm add ${escapeShellArg(args.target || '')}`;
+        else if (args.action === 'remove') cmd += `pnpm remove ${escapeShellArg(args.target || '')}`;
+        else if (args.action === 'run_script') cmd += `pnpm run ${escapeShellArg(args.target || '')}`;
+        else if (args.action === 'store_prune') cmd += `pnpm store prune`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, true, 120000);
+        return { content: [{ type: 'text', text: `PNPM Output:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_drizzle': {
+        const args = z.object({ action: z.enum(['generate', 'push', 'migrate', 'studio']), path: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = args.path ? `cd ${escapeShellArg(args.path)} && ${NVM_SOURCE} ` : `${NVM_SOURCE} `;
+        if (args.action === 'generate') cmd += `npx drizzle-kit generate`;
+        else if (args.action === 'push') cmd += `npx drizzle-kit push`;
+        else if (args.action === 'migrate') cmd += `npx drizzle-kit migrate`;
+        else if (args.action === 'studio') cmd += `timeout 15 npx drizzle-kit studio || echo "Studio launched (timeout 15s to prevent lockup)"`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, true, 120000);
+        return { content: [{ type: 'text', text: `Drizzle Output:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_linter': {
+        const args = z.object({ tool: z.enum(['eslint', 'prettier']), path: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = `cd ${escapeShellArg(args.path)} && ${NVM_SOURCE} `;
+        if (args.tool === 'eslint') cmd += `npx eslint . --fix`;
+        else if (args.tool === 'prettier') cmd += `npx prettier --write .`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, true, 120000);
+        return { content: [{ type: 'text', text: `${args.tool.toUpperCase()} Output:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_vite': {
+        const args = z.object({ action: z.enum(['build', 'preview']), path: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = `cd ${escapeShellArg(args.path)} && ${NVM_SOURCE} `;
+        if (args.action === 'build') cmd += `npm run build`;
+        else if (args.action === 'preview') cmd += `timeout 15 npm run preview || echo "Preview launched (timeout 15s to prevent lockup)"`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, true, 120000);
+        return { content: [{ type: 'text', text: `Vite Output:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
       default:
+
 
 
 

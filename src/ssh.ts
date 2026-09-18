@@ -105,8 +105,22 @@ export class SshClient {
             if (timeout) clearTimeout(timeout);
             resolve({ stdout, stderr, code });
           })
-          .on('data', (data: any) => { stdout += data.toString(); })
-          .stderr.on('data', (data: any) => { stderr += data.toString(); });
+          .on('data', (data: any) => {
+            if (stdout.length < 256000) {
+              stdout += data.toString();
+            } else if (!stdout.endsWith('\n[WARNING: STDOUT TRUNCATED EXCEEDS 256KB]\n')) {
+              stdout += '\n[WARNING: STDOUT TRUNCATED EXCEEDS 256KB]\n';
+              // Note: We don't close the stream immediately because the command might still need to finish gracefully,
+              // but we drop the output to protect the V8 heap.
+            }
+          })
+          .stderr.on('data', (data: any) => {
+            if (stderr.length < 256000) {
+              stderr += data.toString();
+            } else if (!stderr.endsWith('\n[WARNING: STDERR TRUNCATED EXCEEDS 256KB]\n')) {
+              stderr += '\n[WARNING: STDERR TRUNCATED EXCEEDS 256KB]\n';
+            }
+          });
       });
     });
   }
