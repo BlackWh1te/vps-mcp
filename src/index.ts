@@ -8,7 +8,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-function escapeShellArg(arg: string): string {
+function escapeShellArg(arg?: string | null): string {
     if (!arg) return "''";
     return "'" + arg.replace(/'/g, "'\\''") + "'";
 }
@@ -1342,7 +1342,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const args = z.object({ sortBy: z.enum(['cpu', 'mem']).default('cpu'), limit: z.number().default(20), filter: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         const sortFlag = args.sortBy === 'cpu' ? '-%cpu' : '-%mem';
         let cmd = `ps -eo pid,ppid,user,%cpu,%mem,start,time,command --sort=${sortFlag}`;
-        if (args.filter) cmd += ` | grep -i "${args.filter}"`;
+        if (args.filter) cmd += ` | grep -i ${escapeShellArg(args.filter)}`;
         cmd += ` | head -n ${args.limit + 1}`;
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: result.stdout || result.stderr }] };
@@ -1351,8 +1351,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'manage_docker': {
         const args = z.object({ action: z.enum(['list', 'start', 'stop', 'restart', 'logs', 'inspect', 'stats', 'compose_up', 'compose_down']), containerId: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = args.action === 'list' ? `docker ps -a` : `docker ${args.action === 'logs' ? 'logs --tail 100' : args.action} ${args.containerId}`;
-        if (args.action === 'compose_up') cmd = `cd "${args.containerId}" && docker-compose up -d`;
-        if (args.action === 'compose_down') cmd = `cd "${args.containerId}" && docker-compose down`;
+        if (args.action === 'compose_up') cmd = `cd ${escapeShellArg(args.containerId)} && docker-compose up -d`;
+        if (args.action === 'compose_down') cmd = `cd ${escapeShellArg(args.containerId)} && docker-compose down`;
         if (args.action === 'stats') cmd = `docker stats --no-stream ${args.containerId || ''}`;
         const result = await getClient(args.connectionName).executeCommand(`sudo ${cmd}`, true);
         return { content: [{ type: 'text', text: `Docker ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
@@ -1383,13 +1383,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (args.dbType === 'mysql') {
             const u = args.user ? `-u ${args.user}` : '';
             const passEnv = args.password ? `MYSQL_PWD='${args.password.replace(/'/g, "'\\''")}' ` : '';
-            cmd = `${passEnv}mysql ${u} -D ${args.dbName} -e "${safeQuery}"`;
+            cmd = `${passEnv}mysql ${u} -D ${args.dbName} -e ${safeQuery}`;
         } else if (args.dbType === 'postgres') {
             const u = args.user ? `-U ${args.user}` : '';
             const passEnv = args.password ? `PGPASSWORD='${args.password.replace(/'/g, "'\\''")}' ` : '';
-            cmd = `${passEnv}psql ${u} -d ${args.dbName} -c "${safeQuery}"`;
+            cmd = `${passEnv}psql ${u} -d ${args.dbName} -c ${safeQuery}`;
         } else if (args.dbType === 'sqlite') {
-            cmd = `sqlite3 ${args.dbName} "${safeQuery}"`;
+            cmd = `sqlite3 ${args.dbName} ${safeQuery}`;
         }
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `SQL Query Output:\n\n${result.stdout}\n${result.stderr}` }] };
@@ -1412,7 +1412,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'manage_npm': {
         const args = z.object({ action: z.enum(['install', 'install_global', 'remove', 'run_script', 'init', 'audit']), target: z.string().optional(), path: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = `${NVM_SOURCE} `;
-        if (args.path) cmd += `cd "${args.path}" && `;
+        if (args.path) cmd += `cd ${escapeShellArg(args.path)} && `;
         
         switch (args.action) {
             case 'install': cmd += `npm install ${args.target || ''}`; break;
@@ -1443,12 +1443,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         let cmd = `redis-cli -n ${args.db} `;
         switch (args.action) {
             case 'info': cmd += `INFO`; break;
-            case 'keys': cmd += `KEYS "${args.key || '*'}"`; break;
-            case 'get': cmd += `GET "${args.key}"`; break;
+            case 'keys': cmd += `KEYS ${escapeShellArg(args.key || '*')}`; break;
+            case 'get': cmd += `GET ${escapeShellArg(args.key)}`; break;
             case 'set': 
-                cmd = `echo "${(args.value || '').replace(/"/g, '\\"')}" | redis-cli -n ${args.db} -x SET "${args.key}"`; 
+                cmd = `echo ${escapeShellArg(args.value || "")} | redis-cli -n ${args.db} -x SET ${escapeShellArg(args.key)}`; 
                 break;
-            case 'delete': cmd += `DEL "${args.key}"`; break;
+            case 'delete': cmd += `DEL ${escapeShellArg(args.key)}`; break;
             case 'flushall': cmd += `FLUSHALL`; break;
             case 'raw': cmd += args.query; break;
         }
@@ -1463,9 +1463,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         let cmd = '';
         if (args.action === 'clone') {
             if (!args.repo) throw new McpError(ErrorCode.InvalidParams, "repo is required for clone");
-            cmd = `git clone ${args.repo} "${args.path}"`;
+            cmd = `git clone ${args.repo} ${escapeShellArg(args.path)}`;
         } else {
-            cmd = `cd "${args.path}" && git `;
+            cmd = `cd ${escapeShellArg(args.path)} && git `;
             if (args.action === 'checkout') {
                 if (!args.branch) throw new McpError(ErrorCode.InvalidParams, "branch is required for checkout");
                 cmd += `checkout ${args.branch}`;
@@ -1476,7 +1476,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 cmd += `add .`;
             } else if (args.action === 'commit') {
                 if (!args.message) throw new McpError(ErrorCode.InvalidParams, "message required for commit");
-                cmd += `commit -m "${args.message.replace(/"/g, '\\"')}"`;
+                cmd += `commit -m ${escapeShellArg(args.message || "")}`;
             } else if (args.action === 'push') {
                 cmd += `push`;
             } else if (args.action === 'log') {
@@ -1487,7 +1487,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 cmd += `reset --hard`;
             } else if (args.action === 'config') {
                 if (!args.name || !args.email) throw new McpError(ErrorCode.InvalidParams, "name and email required for config");
-                cmd += `config user.name "${args.name.replace(/"/g, '\\"')}" && git config user.email "${args.email.replace(/"/g, '\\"')}"`;
+                cmd += `config user.name ${escapeShellArg(args.name)} && git config user.email ${escapeShellArg(args.email)}`;
             } else {
                 cmd += args.action; // status, pull
             }
@@ -1542,7 +1542,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const args = z.object({ service: z.string().optional(), lines: z.number().default(100), filter: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = `sudo journalctl -n ${args.lines} --no-pager`;
         if (args.service) cmd += ` -u ${args.service}`;
-        if (args.filter) cmd += ` | grep -i "${args.filter}"`;
+        if (args.filter) cmd += ` | grep -i ${escapeShellArg(args.filter)}`;
         const result = await getClient(args.connectionName).executeCommand(cmd, true);
         return { content: [{ type: 'text', text: `System Logs:\n\n${result.stdout}\n${result.stderr}` }] };
       }
@@ -1553,10 +1553,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (args.action === 'list') cmd = `crontab -l`;
         else if (args.action === 'add') {
             if (!args.schedule || !args.command) throw new McpError(ErrorCode.InvalidParams, "schedule and command required");
-            cmd = `(crontab -l 2>/dev/null; echo "${args.schedule} ${args.command}") | crontab -`;
+            cmd = `(crontab -l 2>/dev/null; echo ${escapeShellArg(args.schedule + " " + args.command)}) | crontab -`;
         } else if (args.action === 'remove') {
             if (!args.command) throw new McpError(ErrorCode.InvalidParams, "command required to remove cron");
-            cmd = `crontab -l | grep -v "${args.command}" | crontab -`;
+            cmd = `crontab -l | grep -v ${escapeShellArg(args.command)} | crontab -`;
         }
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Cron ${args.action}:\n\n${result.stdout || 'Success'}\n${result.stderr}` }] };
@@ -1565,10 +1565,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'manage_archive': {
         const args = z.object({ action: z.enum(['compress_zip', 'extract_zip', 'compress_tar', 'extract_tar']), target: z.string(), source: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
-        if (args.action === 'compress_zip') cmd = `zip -r "${args.target}" "${args.source}"`;
-        else if (args.action === 'extract_zip') cmd = `mkdir -p "${args.source}" && unzip "${args.target}" -d "${args.source}"`;
-        else if (args.action === 'compress_tar') cmd = `tar -czvf "${args.target}" -C "${args.source}" .`;
-        else if (args.action === 'extract_tar') cmd = `mkdir -p "${args.source}" && tar -xzvf "${args.target}" -C "${args.source}"`;
+        if (args.action === 'compress_zip') cmd = `zip -r ${escapeShellArg(args.target)} ${escapeShellArg(args.source)}`;
+        else if (args.action === 'extract_zip') cmd = `mkdir -p ${escapeShellArg(args.source)} && unzip ${escapeShellArg(args.target)} -d ${escapeShellArg(args.source)}`;
+        else if (args.action === 'compress_tar') cmd = `tar -czvf ${escapeShellArg(args.target)} -C ${escapeShellArg(args.source)} .`;
+        else if (args.action === 'extract_tar') cmd = `mkdir -p ${escapeShellArg(args.source)} && tar -xzvf ${escapeShellArg(args.target)} -C ${escapeShellArg(args.source)}`;
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Archive ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
       }
@@ -1590,9 +1590,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         } else {
             if (!args.path) throw new McpError(ErrorCode.InvalidParams, "path is required for run/run_coverage");
             if (args.action === 'run') {
-                cmd = `${prefix}pytest ${args.args} "${args.path}"`;
+                cmd = `${prefix}pytest ${args.args} ${escapeShellArg(args.path)}`;
             } else if (args.action === 'run_coverage') {
-                cmd = `${prefix}pytest --cov="${args.path}" ${args.args} "${args.path}"`;
+                cmd = `${prefix}pytest --cov=${escapeShellArg(args.path)} ${args.args} ${escapeShellArg(args.path)}`;
             }
         }
         
@@ -1627,11 +1627,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             if (!args.jobId) throw new McpError(ErrorCode.InvalidParams, "jobId required");
             if (args.action === 'start') {
                 if (!args.command) throw new McpError(ErrorCode.InvalidParams, "command required to start");
-                cmd = `tmux new-session -d -s "${args.jobId}" '${args.command}'`;
+                cmd = `tmux new-session -d -s ${escapeShellArg(args.jobId)} '${args.command}'`;
             } else if (args.action === 'kill') {
-                cmd = `tmux kill-session -t "${args.jobId}"`;
+                cmd = `tmux kill-session -t ${escapeShellArg(args.jobId)}`;
             } else if (args.action === 'logs') {
-                cmd = `tmux capture-pane -t "${args.jobId}" -p`;
+                cmd = `tmux capture-pane -t ${escapeShellArg(args.jobId)} -p`;
             }
         }
         
@@ -1646,11 +1646,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (args.dbType === 'mysql') {
             const u = args.user ? `-u ${args.user}` : '';
             const p = args.password ? `-p${args.password}` : '';
-            cmd = `mysqldump ${u} ${p} ${args.dbName} > "${args.outputFile}"`;
+            cmd = `mysqldump ${u} ${p} ${args.dbName} > ${escapeShellArg(args.outputFile)}`;
         } else {
             const u = args.user ? `-U ${args.user}` : '';
             const passEnv = args.password ? `PGPASSWORD='${args.password}' ` : '';
-            cmd = `${passEnv}pg_dump ${u} -d ${args.dbName} -F c -f "${args.outputFile}"`;
+            cmd = `${passEnv}pg_dump ${u} -d ${args.dbName} -F c -f ${escapeShellArg(args.outputFile)}`;
         }
         
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
@@ -1659,7 +1659,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'test_http_api': {
         const args = z.object({ method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']), url: z.string(), headers: z.string().optional(), body: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
-        let cmd = `curl --max-time 15 -s -w "\nHTTP_STATUS:%{http_code}" -X ${args.method} "${args.url}"`;
+        let cmd = `curl --max-time 15 -s -w "\nHTTP_STATUS:%{http_code}" -X ${args.method} ${escapeShellArg(args.url)}`;
         
         if (args.headers) {
             try {
@@ -1690,7 +1690,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             cmd = `ollama pull ${args.model}`;
         } else if (args.action === 'run_prompt') {
             if (!args.model || !args.prompt) throw new McpError(ErrorCode.InvalidParams, "model and prompt required");
-            cmd = `ollama run ${args.model} "${args.prompt.replace(/"/g, '\\"')}"`;
+            cmd = `ollama run ${args.model} ${escapeShellArg(args.prompt)}`;
         }
         
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
@@ -1699,7 +1699,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'benchmark_api': {
         const args = z.object({ url: z.string(), requests: z.number(), concurrency: z.number(), connectionName: z.string().optional() }).parse(request.params.arguments);
-        const cmd = `ab -n ${args.requests} -c ${args.concurrency} "${args.url}"`;
+        const cmd = `ab -n ${args.requests} -c ${args.concurrency} ${escapeShellArg(args.url)}`;
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Benchmark Results:\n\n${result.stdout}\n${result.stderr}` }] };
       }
@@ -1720,7 +1720,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
             else if (args.action === 'add_ssh_key') {
                 if (!args.sshKey) throw new McpError(ErrorCode.InvalidParams, "sshKey required");
-                cmd = `sudo mkdir -p /home/${args.username}/.ssh && echo "${args.sshKey}" | sudo tee -a /home/${args.username}/.ssh/authorized_keys && sudo chown -R ${args.username}:${args.username} /home/${args.username}/.ssh && sudo chmod 700 /home/${args.username}/.ssh && sudo chmod 600 /home/${args.username}/.ssh/authorized_keys`;
+                cmd = `sudo mkdir -p /home/${args.username}/.ssh && echo ${escapeShellArg(args.sshKey)} | sudo tee -a /home/${args.username}/.ssh/authorized_keys && sudo chown -R ${args.username}:${args.username} /home/${args.username}/.ssh && sudo chmod 700 /home/${args.username}/.ssh && sudo chmod 600 /home/${args.username}/.ssh/authorized_keys`;
             }
         }
         
@@ -1732,10 +1732,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const args = z.object({ directory: z.string(), filenamePattern: z.string().optional(), contentPattern: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
         if (args.contentPattern) {
-            const filter = args.filenamePattern ? `--include="${args.filenamePattern}" ` : '';
-            cmd = `grep -rnw ${filter}"${args.directory}" -e "${args.contentPattern.replace(/"/g, '\\"')}" | head -n 100`;
+            const filter = args.filenamePattern ? `--include=${escapeShellArg(args.filenamePattern)} ` : '';
+            cmd = `grep -rnw ${filter}${escapeShellArg(args.directory)} -e ${escapeShellArg(args.contentPattern)} | head -n 100`;
         } else if (args.filenamePattern) {
-            cmd = `find "${args.directory}" -name "${args.filenamePattern}" | head -n 100`;
+            cmd = `find ${escapeShellArg(args.directory)} -name ${escapeShellArg(args.filenamePattern)} | head -n 100`;
         } else {
             throw new McpError(ErrorCode.InvalidParams, "Must provide filenamePattern or contentPattern");
         }
@@ -1746,7 +1746,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'analyze_disk_usage': {
         const args = z.object({ directory: z.string(), depth: z.number().default(1), connectionName: z.string().optional() }).parse(request.params.arguments);
-        const cmd = `sudo du -h -d ${args.depth} "${args.directory}" | sort -hr | head -n 50`;
+        const cmd = `sudo du -h -d ${args.depth} ${escapeShellArg(args.directory)} | sort -hr | head -n 50`;
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Disk Usage Analysis:\n\n${result.stdout}\n${result.stderr}` }] };
       }
@@ -1827,7 +1827,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         let cmd = '';
         const keyPath = `~/.ssh/id_${args.type}`;
         if (args.action === 'generate') {
-            const commentFlag = args.comment ? `-C "${args.comment}"` : '';
+            const commentFlag = args.comment ? `-C ${escapeShellArg(args.comment)}` : '';
             cmd = `mkdir -p ~/.ssh && chmod 700 ~/.ssh && ssh-keygen -t ${args.type} -f ${keyPath} -N "" ${commentFlag}`;
         } else if (args.action === 'get_public') {
             cmd = `cat ${keyPath}.pub`;
@@ -1839,7 +1839,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'patch_file': {
         const args = z.object({ path: z.string(), patchContent: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
         const b64 = Buffer.from(args.patchContent).toString('base64');
-        const cmd = `echo "${b64}" | base64 -d | patch "${args.path}"`;
+        const cmd = `echo '${b64}' | base64 -d | patch ${escapeShellArg(args.path)}`;
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Patch Results:\n\n${result.stdout}\n${result.stderr}` }] };
       }
@@ -1854,7 +1854,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         } else if (args.action === 'add') {
             if (!args.value) throw new McpError(ErrorCode.InvalidParams, "value is required for add");
             const prefix = args.global ? '' : 'export ';
-            const exportStr = `${prefix}${args.key}="${args.value.replace(/"/g, '\\"')}"`;
+            const exportStr = `${prefix}${args.key}=${escapeShellArg(args.value)}`;
             cmd = `${sudo}sed -i '/^${prefix}${args.key}=/d' ${targetFile} && echo '${exportStr}' | ${sudo}tee -a ${targetFile}`;
         }
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
@@ -1867,7 +1867,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (args.action === 'status') cmd = `sudo systemctl status ${args.serviceName} && echo "\n--- Java RAM Usage ---" && ps -C java -o pid,%cpu,%mem,cmd | grep -i lavalink`;
         else if (args.action === 'logs') cmd = `sudo journalctl -u ${args.serviceName} -n 100 --no-pager`;
         else if (args.action === 'restart') cmd = `sudo systemctl restart ${args.serviceName}`;
-        else if (args.action === 'rest_stats') cmd = `curl -s -H "Authorization: ${args.password.replace(/"/g, '\\"')}" http://localhost:${args.port}/v4/stats`;
+        else if (args.action === 'rest_stats') cmd = `curl -s -H ${escapeShellArg("Authorization: " + args.password)} http://localhost:${args.port}/v4/stats`;
         
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Lavalink ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
@@ -1875,7 +1875,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'search_files': {
         const args = z.object({ path: z.string(), query: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
-        const cmd = `grep -rn "${args.query.replace(/"/g, '\"')}" "${args.path}" | head -n 50`;
+        const cmd = `grep -rn ${escapeShellArg(args.query)} ${escapeShellArg(args.path)} | head -n 50`;
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Search Results:
 
@@ -1885,7 +1885,7 @@ ${result.stderr}` }] };
 
       case 'manage_prisma': {
         const args = z.object({ action: z.enum(['generate', 'db_push', 'migrate_deploy']), path: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
-        let cmd = `cd "${args.path}" && ${NVM_SOURCE} npx prisma `;
+        let cmd = `cd ${escapeShellArg(args.path)} && ${NVM_SOURCE} npx prisma `;
         if (args.action === 'generate') cmd += 'generate';
         if (args.action === 'db_push') cmd += 'db push --accept-data-loss';
         if (args.action === 'migrate_deploy') cmd += 'migrate deploy';
@@ -1913,7 +1913,7 @@ ${result.stderr}` }] };
             return { content: [{ type: 'text', text: `.env Contents:\n\n${JSON.stringify(envObj, null, 2)}` }] };
         } else if (args.action === 'update') {
             if (!args.key || args.value === undefined) throw new McpError(ErrorCode.InvalidParams, "key and value required for update");
-            cmd = `touch "${args.path}" && sed -i '/^${args.key}=/d' "${args.path}" && echo "${args.key}=\"${args.value.replace(/"/g, '\"')}\"" >> "${args.path}"`;
+            cmd = `touch ${escapeShellArg(args.path)} && sed -i ${escapeShellArg("/^" + args.key + "=/d")} ${escapeShellArg(args.path)} && echo ${escapeShellArg(args.key + "=" + args.value)} >> ${escapeShellArg(args.path)}`;
         }
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `.env ${args.action}:
@@ -1944,10 +1944,10 @@ ${result.stderr}` }] };
         if (args.action === 'export') {
             if (!args.file) throw new McpError(ErrorCode.InvalidParams, "file required for export");
             const idFlag = args.workflowId ? `--id=${args.workflowId}` : '--all';
-            cmd = `${NVM_SOURCE} npx n8n export:workflow ${idFlag} --output="${args.file}"`;
+            cmd = `${NVM_SOURCE} npx n8n export:workflow ${idFlag} --output=${escapeShellArg(args.file)}`;
         } else if (args.action === 'import') {
             if (!args.file) throw new McpError(ErrorCode.InvalidParams, "file required for import");
-            cmd = `${NVM_SOURCE} npx n8n import:workflow --input="${args.file}"`;
+            cmd = `${NVM_SOURCE} npx n8n import:workflow --input=${escapeShellArg(args.file)}`;
         }
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `N8N ${args.action}:
@@ -1958,7 +1958,7 @@ ${result.stderr}` }] };
 
       case 'manage_nextjs': {
         const args = z.object({ action: z.enum(['clear_cache', 'build']), path: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
-        let cmd = `cd "${args.path}" && `;
+        let cmd = `cd ${escapeShellArg(args.path)} && `;
         if (args.action === 'clear_cache') cmd += `rm -rf .next/cache && echo "Next.js cache cleared."`;
         else if (args.action === 'build') cmd += `${NVM_SOURCE} npm run build`;
         
@@ -2014,7 +2014,7 @@ ${result.stderr}` }] };
         if (args.action === 'list_remotes') cmd = `rclone listremotes`;
         else if (args.action === 'sync') {
             if (!args.source || !args.remoteDest) throw new McpError(ErrorCode.InvalidParams, "Source and remoteDest required for sync");
-            cmd = `rclone sync -P "${args.source}" "${args.remoteDest}"`;
+            cmd = `rclone sync -P ${escapeShellArg(args.source)} ${escapeShellArg(args.remoteDest)}`;
         }
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Cloud Sync ${args.action}:
@@ -2044,7 +2044,7 @@ ${result.stderr}` }] };
         const args = z.object({ path: z.string(), seconds: z.number().default(10), connectionName: z.string().optional() }).parse(request.params.arguments);
         const safeTimeout = Math.min(args.seconds, 60); // Cap at 60s to prevent MCP lockup
         // We use executeCommand timeoutMs equal to safeTimeout + 5 seconds buffer
-        const cmd = `timeout ${safeTimeout} tail -f "${args.path}" || true`;
+        const cmd = `timeout ${safeTimeout} tail -f ${escapeShellArg(args.path)} || true`;
         const result = await getClient(args.connectionName).executeCommand(cmd, false, (safeTimeout + 5) * 1000);
         return { content: [{ type: 'text', text: `Live Log Capture (${safeTimeout}s):
 
