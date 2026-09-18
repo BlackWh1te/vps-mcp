@@ -461,10 +461,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', enum: ['clone', 'pull', 'status', 'checkout'] },
+            action: { type: 'string', enum: ['clone', 'pull', 'status', 'checkout', 'add', 'commit', 'push'] },
             repo: { type: 'string', description: 'Repository URL (for clone)' },
             path: { type: 'string', description: 'Path to repository (for all actions)' },
             branch: { type: 'string', description: 'Branch name (for checkout)' },
+            message: { type: 'string', description: 'Commit message (for commit)' },
             connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
           },
           required: ['action', 'path']
@@ -893,8 +894,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'execute_command': {
-        const args = z.object({ command: z.string(), usePty: z.boolean().default(true), connectionName: z.string().optional() }).parse(request.params.arguments);
-        const result = await getClient(args.connectionName).executeCommand(args.command, args.usePty);
+        const args = z.object({ command: z.string(), usePty: z.boolean().default(true), timeout: z.number().default(0), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const result = await getClient(args.connectionName).executeCommand(args.command, args.usePty, args.timeout);
         return { content: [{ type: 'text', text: `STDOUT:\n${result.stdout}\n\nSTDERR:\n${result.stderr}\n\nExit Code: ${result.code}` }] };
       }
 
@@ -1136,7 +1137,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // --- THE HOLY GRAIL SUITES ---
       case 'manage_git': {
-        const args = z.object({ action: z.enum(['clone', 'pull', 'status', 'checkout']), repo: z.string().optional(), path: z.string(), branch: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ action: z.enum(['clone', 'pull', 'status', 'checkout', 'add', 'commit', 'push']), repo: z.string().optional(), path: z.string(), branch: z.string().optional(), message: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
         if (args.action === 'clone') {
             if (!args.repo) throw new McpError(ErrorCode.InvalidParams, "repo is required for clone");
@@ -1146,6 +1147,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             if (args.action === 'checkout') {
                 if (!args.branch) throw new McpError(ErrorCode.InvalidParams, "branch is required for checkout");
                 cmd += ` ${args.branch}`;
+            } else if (args.action === 'add') {
+                cmd = `cd "${args.path}" && git add .`;
+            } else if (args.action === 'commit') {
+                if (!args.message) throw new McpError(ErrorCode.InvalidParams, "message required for commit");
+                cmd = `cd "${args.path}" && git commit -m "${args.message.replace(/"/g, '\\"')}"`;
+            } else if (args.action === 'push') {
+                cmd = `cd "${args.path}" && git push`;
             }
         }
         const result = await getClient(args.connectionName).executeCommand(cmd, true);

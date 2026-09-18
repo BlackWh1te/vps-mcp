@@ -74,7 +74,7 @@ export class SshClient {
       return path.startsWith('/') ? path : (this.cwd ? `${this.cwd}/${path}` : path);
   }
 
-  async executeCommand(command: string, usePty: boolean = true): Promise<{ stdout: string; stderr: string; code: number | null }> {
+  async executeCommand(command: string, usePty: boolean = true, timeoutMs: number = 0): Promise<{ stdout: string; stderr: string; code: number | null }> {
     return new Promise((resolve, reject) => {
       if (!this.connected) return reject(new Error('Not connected to VPS'));
 
@@ -82,10 +82,27 @@ export class SshClient {
 
       this.client.exec(wrappedCommand, { pty: usePty }, (err, stream) => {
         if (err) return reject(err);
+        
         let stdout = '';
         let stderr = '';
+        let timeout: NodeJS.Timeout | null = null;
+        let isFinished = false;
+
+        if (timeoutMs > 0) {
+            timeout = setTimeout(() => {
+                if (!isFinished) {
+                    isFinished = true;
+                    stream.close();
+                    resolve({ stdout: stdout + '\n[TIMEOUT EXCEEDED]', stderr, code: 124 });
+                }
+            }, timeoutMs);
+        }
+
         stream
           .on('close', (code: number, signal: any) => {
+            if (isFinished) return;
+            isFinished = true;
+            if (timeout) clearTimeout(timeout);
             resolve({ stdout, stderr, code });
           })
           .on('data', (data: any) => { stdout += data.toString(); })
