@@ -1,4 +1,4 @@
-# VPS MCP Server (v19.0.0 - Ultimate Edition)
+# VPS MCP Server (v20.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -67,6 +67,12 @@ px drizzle-kit generate, push, migrate, and even launch the studio headlessly ov
 - **manage_linter**: Code messy? Trigger this tool to instantly blanket your entire project with 
 px eslint . --fix or 
 px prettier --write ..
+
+### 🕵️‍♂️ 20. The Deep Kernel & Forensics Suite (NEW!)
+- **	race_process**: Attach strace to any running process by PID to deeply profile its system calls in real-time. Crucial for debugging frozen apps, memory leaks, or unhandled exceptions at the kernel level.
+- **nalyze_sockets**: Drops down to lsof and ss to map exactly which process is holding which port, preventing hidden port conflicts.
+- **udit_system_security**: Need forensics? Scan for rootkits via chkrootkit, parse raw kernel OOM (Out-of-Memory) kills from the dmesg ring buffer, or track raw failed SSH login attempts in /var/log/auth.log.
+- **docker_exec**: Go beyond starting/stopping containers—execute raw commands directly *inside* isolated Docker environments.
 
 ---
 

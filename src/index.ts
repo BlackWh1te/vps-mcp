@@ -402,7 +402,60 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
 
-      // --- BRAND NEW: DEVELOPER & NODEJS SUITE (NVM, NPM, PM2, REDIS) ---
+      
+        // --- BRAND NEW: DEEP KERNEL & FORENSICS SUITE ---
+        {
+          name: 'trace_process',
+          description: 'Deep tool: Use strace to attach to a running process and summarize its system calls (useful for debugging frozen apps or high CPU).',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              pid: { type: 'number', description: 'Process ID to trace' },
+              duration: { type: 'number', description: 'How many seconds to trace (default: 5)' },
+              ...connectionProp
+            },
+            required: ['pid']
+          }
+        },
+        {
+          name: 'analyze_sockets',
+          description: 'Deep tool: Inspect open network sockets and the exact processes holding them (lsof / ss).',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              port: { type: 'number', description: 'Specific port to deeply inspect (optional)' },
+              ...connectionProp
+            }
+          }
+        },
+        {
+          name: 'audit_system_security',
+          description: 'Deep tool: Scan for rootkits or audit raw kernel auth logs for brute-force attacks.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              action: { type: 'string', enum: ['failed_logins', 'rootkit_scan', 'oom_kills'] },
+              ...connectionProp
+            },
+            required: ['action']
+          }
+        },
+        {
+          name: 'docker_exec',
+          description: 'Deep tool: Execute a command directly inside a running Docker container.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              container: { type: 'string', description: 'Container name or ID' },
+              command: { type: 'string', description: 'Command to run inside the container' },
+              user: { type: 'string', description: 'Run as specific user (optional)' },
+              ...connectionProp
+            },
+            required: ['container', 'command']
+          }
+        },
+
+        // --- BRAND NEW: DEVELOPER & NODEJS SUITE (NVM, NPM, PM2, REDIS) ---
       {
         name: 'manage_nvm',
         description: 'Manage Node.js versions using NVM (Node Version Manager).',
@@ -1393,6 +1446,55 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `SQL Query Output:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      
+      case 'trace_process': {
+        const args = z.object({ pid: z.number(), duration: z.number().default(5), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const safeTimeout = Math.min(args.duration, 30);
+        // We use -c to get a summary table instead of a massive stream of syscalls
+        const cmd = `sudo timeout ${safeTimeout} strace -p ${args.pid} -c || true`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false, (safeTimeout + 5) * 1000);
+        return { content: [{ type: 'text', text: `Strace Syscall Summary (PID ${args.pid}):
+
+${result.stderr || result.stdout}` }] };
+      }
+
+      case 'analyze_sockets': {
+        const args = z.object({ port: z.number().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = args.port ? `sudo lsof -i :${args.port}` : `sudo ss -tulpn`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Socket Analysis:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'audit_system_security': {
+        const args = z.object({ action: z.enum(['failed_logins', 'rootkit_scan', 'oom_kills']), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'failed_logins') cmd = `sudo grep "Failed password" /var/log/auth.log | tail -n 50`;
+        else if (args.action === 'rootkit_scan') cmd = `if command -v chkrootkit >/dev/null 2>&1; then sudo chkrootkit -q; else echo "chkrootkit not installed. Run: sudo apt-get install chkrootkit"; fi`;
+        else if (args.action === 'oom_kills') cmd = `sudo dmesg -T | grep -i 'killed process' || echo "No OOM kills found in current dmesg ring buffer."`;
+        
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Security Audit (${args.action}):
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'docker_exec': {
+        const args = z.object({ container: z.string(), command: z.string(), user: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const userFlag = args.user ? `-u ${escapeShellArg(args.user)}` : '';
+        // Command needs to be passed to bash/sh inside the container generally, but we can just pass it directly if unquoted.
+        // Actually, passing it to sh -c is safest.
+        const cmd = `docker exec ${userFlag} ${escapeShellArg(args.container)} sh -c ${escapeShellArg(args.command)}`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Docker Exec (${args.container}):
+
+${result.stdout}
+${result.stderr}` }] };
       }
 
       // --- NODE.JS / DEVELOPER SUITE ---
