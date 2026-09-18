@@ -15,7 +15,7 @@ dotenv.config();
 const server = new Server(
   {
     name: 'vps-mcp',
-    version: '7.0.0',
+    version: '8.0.0',
   },
   {
     capabilities: {
@@ -667,7 +667,51 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['url', 'requests', 'concurrency']
         }
       }
+
+      ,{
+        name: 'manage_users',
+        description: 'Manage VPS OS users, groups, and SSH keys.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['list', 'create', 'delete', 'add_to_group', 'add_ssh_key'] },
+            username: { type: 'string' },
+            group: { type: 'string' },
+            sshKey: { type: 'string', description: 'Public SSH key string to add' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'search_files',
+        description: 'Deep search for files or file contents (wraps find and grep).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            directory: { type: 'string', description: 'Base directory to search in' },
+            filenamePattern: { type: 'string', description: 'Pattern to match filenames (e.g., "*.ts")' },
+            contentPattern: { type: 'string', description: 'Text/Regex to search inside files' },
+            connectionName: { type: 'string' }
+          },
+          required: ['directory']
+        }
+      },
+      {
+        name: 'analyze_disk_usage',
+        description: 'Find out which folders or files are consuming the most disk space.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            directory: { type: 'string', description: 'Directory to analyze' },
+            depth: { type: 'number', description: 'Depth of directories to analyze (default 1)' },
+            connectionName: { type: 'string' }
+          },
+          required: ['directory']
+        }
+      }
     ],
+
 
 
 
@@ -1213,7 +1257,55 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Benchmark Results:\n\n${result.stdout}\n${result.stderr}` }] };
       }
+
+      case 'manage_users': {
+        const args = z.object({ action: z.enum(['list', 'create', 'delete', 'add_to_group', 'add_ssh_key']), username: z.string().optional(), group: z.string().optional(), sshKey: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        
+        if (args.action === 'list') {
+            cmd = `cut -d: -f1 /etc/passwd`;
+        } else {
+            if (!args.username) throw new McpError(ErrorCode.InvalidParams, "username required");
+            if (args.action === 'create') cmd = `sudo useradd -m -s /bin/bash ${args.username}`;
+            else if (args.action === 'delete') cmd = `sudo userdel -r ${args.username}`;
+            else if (args.action === 'add_to_group') {
+                if (!args.group) throw new McpError(ErrorCode.InvalidParams, "group required");
+                cmd = `sudo usermod -aG ${args.group} ${args.username}`;
+            }
+            else if (args.action === 'add_ssh_key') {
+                if (!args.sshKey) throw new McpError(ErrorCode.InvalidParams, "sshKey required");
+                cmd = `sudo mkdir -p /home/${args.username}/.ssh && echo "${args.sshKey}" | sudo tee -a /home/${args.username}/.ssh/authorized_keys && sudo chown -R ${args.username}:${args.username} /home/${args.username}/.ssh && sudo chmod 700 /home/${args.username}/.ssh && sudo chmod 600 /home/${args.username}/.ssh/authorized_keys`;
+            }
+        }
+        
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `Users ${args.action}:\n\n${result.stdout || 'Success'}\n${result.stderr}` }] };
+      }
+
+      case 'search_files': {
+        const args = z.object({ directory: z.string(), filenamePattern: z.string().optional(), contentPattern: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.contentPattern) {
+            const filter = args.filenamePattern ? `--include="${args.filenamePattern}" ` : '';
+            cmd = `grep -rnw ${filter}"${args.directory}" -e "${args.contentPattern.replace(/"/g, '\\"')}" | head -n 100`;
+        } else if (args.filenamePattern) {
+            cmd = `find "${args.directory}" -name "${args.filenamePattern}" | head -n 100`;
+        } else {
+            throw new McpError(ErrorCode.InvalidParams, "Must provide filenamePattern or contentPattern");
+        }
+        
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Search Results (Capped at 100):\n\n${result.stdout || 'No matches found.'}\n${result.stderr}` }] };
+      }
+
+      case 'analyze_disk_usage': {
+        const args = z.object({ directory: z.string(), depth: z.number().default(1), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = `sudo du -h -d ${args.depth} "${args.directory}" | sort -hr | head -n 50`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Disk Usage Analysis:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
       default:
+
 
 
 

@@ -1,4 +1,4 @@
-# VPS MCP Server (v7.0.0 - Ultimate Edition)
+# VPS MCP Server (v8.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -65,10 +65,15 @@ All tools support an optional `connectionName` parameter to route commands when 
 - **`manage_python`**: Manage virtual environments, list pip packages, and run python scripts cleanly.
 - **`manage_pytest`**: Orchestrate test suites. Includes automatic dependency installation (`pytest-cov`), targeted test running, and coverage report generation inside your specific virtual environments.
 
-### 🤖 8. AI & API Testing Suite (NEW!)
+### 🤖 8. AI & API Testing Suite
 - **`test_http_api`**: A built-in Postman equivalent! Natively execute API requests (`GET`, `POST`, `PUT`, `DELETE`) from the VPS. Perfect for testing internal app APIs, hitting LLM endpoints (OpenAI, Claude, Hermes), and debugging webhooks.
 - **`manage_ollama`**: Spin up local AI directly on your VPS! Natively install Ollama, pull models (like `hermes`, `llama3`), run prompts, and manage the Ollama systemd server.
 - **`benchmark_api`**: Load test your applications seamlessly using Apache Benchmark (`ab`). Pass concurrency and request counts to instantly gauge endpoint performance under load.
+
+### 🏗️ 9. Infrastructure & Security Suite (NEW!)
+- **`manage_users`**: Native control over VPS users. Create, delete, add to `sudo` groups, list all users, or seamlessly inject `authorized_keys` for SSH access directly from the MCP.
+- **`search_files`**: Deep search for files wrapping `find` and `grep` natively. Search by filename patterns (`*.ts`) or scan directory contents for regex strings without worrying about bash escaping rules.
+- **`analyze_disk_usage`**: Wraps `du -sh` to instantly figure out what is consuming disk space on the server. Analyze by depth and dynamically sort output to hunt down huge log files or docker images!
 
 ---
 
