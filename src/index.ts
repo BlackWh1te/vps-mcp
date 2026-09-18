@@ -1070,11 +1070,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         let cmd = '';
         if (args.dbType === 'mysql') {
             const u = args.user ? `-u ${args.user}` : '';
-            const p = args.password ? `-p${args.password}` : '';
-            cmd = `mysql ${u} ${p} -D ${args.dbName} -e "${args.query.replace(/"/g, '\\"')}"`;
+            const passEnv = args.password ? `MYSQL_PWD='${args.password.replace(/'/g, "'\\''")}' ` : '';
+            cmd = `${passEnv}mysql ${u} -D ${args.dbName} -e "${args.query.replace(/"/g, '\\"')}"`;
         } else if (args.dbType === 'postgres') {
             const u = args.user ? `-U ${args.user}` : '';
-            const passEnv = args.password ? `PGPASSWORD='${args.password}' ` : '';
+            const passEnv = args.password ? `PGPASSWORD='${args.password.replace(/'/g, "'\\''")}' ` : '';
             cmd = `${passEnv}psql ${u} -d ${args.dbName} -c "${args.query.replace(/"/g, '\\"')}"`;
         } else if (args.dbType === 'sqlite') {
             cmd = `sqlite3 ${args.dbName} "${args.query.replace(/"/g, '\\"')}"`;
@@ -1133,7 +1133,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             case 'info': cmd += `INFO`; break;
             case 'keys': cmd += `KEYS "${args.key || '*'}"`; break;
             case 'get': cmd += `GET "${args.key}"`; break;
-            case 'set': cmd += `SET "${args.key}" "${args.value}"`; break;
+            case 'set': 
+                cmd = `echo "${(args.value || '').replace(/"/g, '\\"')}" | redis-cli -n ${args.db} -x SET "${args.key}"`; 
+                break;
             case 'delete': cmd += `DEL "${args.key}"`; break;
             case 'flushall': cmd += `FLUSHALL`; break;
             case 'raw': cmd += args.query; break;
