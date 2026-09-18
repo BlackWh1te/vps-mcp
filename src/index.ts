@@ -860,7 +860,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', enum: ['status', 'logs', 'restart'] },
+            action: { type: 'string', enum: ['status', 'logs', 'restart', 'rest_stats'] },
+            password: { type: 'string', description: 'Lavalink REST password (for rest_stats)' },
+            port: { type: 'number', description: 'Lavalink REST port (default 2333)' },
             serviceName: { type: 'string', description: 'Name of the lavalink service (default: lavalink)' },
             connectionName: { type: 'string' }
           },
@@ -924,7 +926,47 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['action', 'token']
         }
       }
+
+      ,{
+        name: 'manage_n8n',
+        description: 'Manage N8N workflows locally using the N8N CLI.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['export', 'import'] },
+            workflowId: { type: 'string', description: 'Workflow ID to export' },
+            file: { type: 'string', description: 'File path for export/import' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'manage_nextjs',
+        description: 'Next.js specific utilities (clear cache, build).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['clear_cache', 'build'] },
+            path: { type: 'string', description: 'Path to the Next.js project directory' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action', 'path']
+        }
+      },
+      {
+        name: 'get_recent_crashes',
+        description: 'Error Aggregator: Instantly pulls recent errors from PM2 and systemd journalctl.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            lines: { type: 'number', description: 'Number of lines to fetch per log', default: 50 },
+            connectionName: { type: 'string' }
+          }
+        }
+      }
     ],
+
 
 
 
@@ -1676,11 +1718,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'manage_lavalink': {
-        const args = z.object({ action: z.enum(['status', 'logs', 'restart']), serviceName: z.string().default('lavalink'), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ action: z.enum(['status', 'logs', 'restart', 'rest_stats']), serviceName: z.string().default('lavalink'), password: z.string().default('youshallnotpass'), port: z.number().default(2333), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
         if (args.action === 'status') cmd = `sudo systemctl status ${args.serviceName} && echo "\n--- Java RAM Usage ---" && ps -C java -o pid,%cpu,%mem,cmd | grep -i lavalink`;
         else if (args.action === 'logs') cmd = `sudo journalctl -u ${args.serviceName} -n 100 --no-pager`;
         else if (args.action === 'restart') cmd = `sudo systemctl restart ${args.serviceName}`;
+        else if (args.action === 'rest_stats') cmd = `curl -s -H "Authorization: ${args.password.replace(/"/g, '\\"')}" http://localhost:${args.port}/v4/stats`;
         
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Lavalink ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
@@ -1740,7 +1783,49 @@ ${result.stderr}` }] };
 ${result.stdout}
 ${result.stderr}` }] };
       }
+
+      case 'manage_n8n': {
+        const args = z.object({ action: z.enum(['export', 'import']), workflowId: z.string().optional(), file: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'export') {
+            if (!args.file) throw new McpError(ErrorCode.InvalidParams, "file required for export");
+            const idFlag = args.workflowId ? `--id=${args.workflowId}` : '--all';
+            cmd = `${NVM_SOURCE} npx n8n export:workflow ${idFlag} --output="${args.file}"`;
+        } else if (args.action === 'import') {
+            if (!args.file) throw new McpError(ErrorCode.InvalidParams, "file required for import");
+            cmd = `${NVM_SOURCE} npx n8n import:workflow --input="${args.file}"`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `N8N ${args.action}:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'manage_nextjs': {
+        const args = z.object({ action: z.enum(['clear_cache', 'build']), path: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = `cd "${args.path}" && `;
+        if (args.action === 'clear_cache') cmd += `rm -rf .next/cache && echo "Next.js cache cleared."`;
+        else if (args.action === 'build') cmd += `${NVM_SOURCE} npm run build`;
+        
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `Next.js ${args.action}:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'get_recent_crashes': {
+        const args = z.object({ lines: z.number().default(50), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = `echo "=== PM2 ERRORS ===" && ${NVM_SOURCE} npx pm2 logs --err --nostream --lines ${args.lines} && echo "\n=== SYSTEMD ERRORS ===" && sudo journalctl -p 3 -xb -n ${args.lines} --no-pager`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Error Aggregation Report:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
       default:
+
 
 
 

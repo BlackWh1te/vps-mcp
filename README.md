@@ -1,4 +1,4 @@
-# VPS MCP Server (v15.0.0 - Ultimate Edition)
+# VPS MCP Server (v16.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -29,6 +29,15 @@ estart to bounce the music node without needing raw SSH tunnels!
 - **manage_env_file**: Read .env files dynamically as parsed JSON, or safely inject/update tokens (like \DISCORD_TOKEN\) without ever corrupting the bash syntax.
 - **manage_discord**: Natively validate if a Discord Bot token is alive, or force-clear stuck slash commands across the Discord API directly from the MCP.
 - **Python Package Manager (manage_python)**: Added \install_package\ to instantly pip install missing dependencies (like \discord.py\) straight into your isolated \env\.
+
+### 🏢 16. The Enterprise Big Tech Architecture (NEW!)
+- **manage_n8n**: Export or import specific automation workflows natively using the 
+px n8n CLI backend.
+- **manage_nextjs**: Purge the .next/cache directory or instantly trigger a stream-ready 
+pm run build.
+- **get_recent_crashes**: The ultimate Error Aggregator. One command pulls the latest 50 priority-3 error logs from both journalctl (System) and pm2 logs --err (Node) simultaneously to instantly find the root cause of any outage.
+- **manage_lavalink (REST Upgraded)**: Added 
+est_stats action. Instead of parsing systemctl logs, this pings Lavalink's native /v4/stats API endpoint to return active players, memory allocation, and CPU load in precise JSON formatting!
 
 ---
 
