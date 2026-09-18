@@ -1,4 +1,4 @@
-# VPS MCP Server (v12.0.0 - Ultimate Edition)
+# VPS MCP Server (v13.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -15,6 +15,10 @@ What started as a simple SSH wrapper has evolved into a **fully-fledged Systems 
 - **manage_ssh_keys**: Automatically generate and retrieve RSA or Ed25519 SSH keys directly on the VPS. Perfect for linking your VPS securely to GitHub or GitLab.
 - **patch_file**: Apply native Unified Diffs (.patch) directly to source files on the server using the Unix patch command without overwriting the entire file.
 - **manage_environment**: Safely inject or remove exported environment variables (like API Keys or $PATH extensions) directly into ~/.bashrc or globally via /etc/environment.
+
+### 🎵 13. The G SERVER Suite (NEW!)
+- **manage_lavalink**: A highly specialized tool requested to manage Lavalink music nodes. Run status to see the exact RAM usage of the Java process, logs to dump journalctl, or 
+estart to bounce the music node without needing raw SSH tunnels!
 
 ---
 

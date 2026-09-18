@@ -853,7 +853,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['action', 'key']
         }
       }
+
+      ,{
+        name: 'manage_lavalink',
+        description: 'Specific tool for managing Lavalink music nodes (check stats, restart, logs) for G SERVER.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['status', 'logs', 'restart'] },
+            serviceName: { type: 'string', description: 'Name of the lavalink service (default: lavalink)' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      }
     ],
+
 
 
 
@@ -1592,7 +1607,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Environment ${args.action}:\n\n${result.stdout || 'Successfully updated ' + targetFile}\n${result.stderr}` }] };
       }
+
+      case 'manage_lavalink': {
+        const args = z.object({ action: z.enum(['status', 'logs', 'restart']), serviceName: z.string().default('lavalink'), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'status') cmd = `sudo systemctl status ${args.serviceName} && echo "\n--- Java RAM Usage ---" && ps -C java -o pid,%cpu,%mem,cmd | grep -i lavalink`;
+        else if (args.action === 'logs') cmd = `sudo journalctl -u ${args.serviceName} -n 100 --no-pager`;
+        else if (args.action === 'restart') cmd = `sudo systemctl restart ${args.serviceName}`;
+        
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Lavalink ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
       default:
+
 
 
 
