@@ -1,35 +1,77 @@
-# VPS MCP Server
+# VPS MCP Server (v5.0.0 - Ultimate Edition)
 
-An MCP server that enables an AI agent to connect to and control a VPS (Virtual Private Server) via SSH.
+An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
-## Tools
+What started as a simple SSH wrapper has evolved into a **fully-fledged Systems Administration & Developer Operations Suite**.
 
-### Session Management
-- **`connect_vps`**: Establish SSH connection (Host, Port, User, Password/Key).
-- **`disconnect_vps`**: Close the session.
+## 🌟 Key Features
 
-### File System Operations
-- **`list_directory`**: List files/folders in a path (supports relative paths to CWD).
-- **`create_directory`**: Create a new directory.
-- **`read_file`**: Read file contents.
-- **`write_file`**: Create or overwrite a file with content.
-- **`delete_item`**: Recursively delete a file or directory.
-- **`change_directory`**: Change the current working directory for subsequent commands.
-- **`get_current_directory`**: Get the current tracked working directory.
+- **Multi-Server Orchestration**: Connect to multiple servers simultaneously (e.g., DB Server, Web Server) and route commands natively.
+- **Native SFTP Tooling**: Bypass clunky bash commands for file transfers. Supports deep SFTP operations like Posix renames, symlinks, truncation, permissions, and local <-> remote transfers.
+- **Paramiko-Equivalent Functionality**: Features advanced SSH protocol capabilities including local port forwarding, Agent Forwarding, and interactive PTY allocation.
+- **Developer-Ready Suites**: Natively manage Git, Docker, Node.js (NVM/NPM/PM2), Python (Venv/PyTest), and SQL Databases securely via structured schemas.
 
-### Command Execution
-- **`execute_command`**: Run shell commands. 
-  - **Note**: Commands are automatically prefixed with `cd <current_working_directory>`. 
-  - To change directory persistently, use `change_directory` instead of running `cd` here.
+---
 
-## Usage
+## 🛠️ Complete Tool Reference
+
+All tools support an optional `connectionName` parameter to route commands when managing multiple VPS connections simultaneously.
+
+### 🔌 1. Session Management
+- **`connect_vps`**: Establish an SSH connection. Supports passwords, private keys, custom ports, and `agentForward`.
+- **`disconnect_vps`**: Disconnect from a specific session or all sessions.
+- **`list_connections`**: List all active SSH connections managed by this MCP.
+
+### 📂 2. File System & SFTP
+- **`list_directory`**, **`create_directory`**, **`change_directory`**, **`get_current_directory`**
+- **`read_file`**, **`write_file`**, **`delete_item`**
+- **`upload_file`**, **`download_file`**: Transfer files between your local host and the VPS.
+- **`manage_archive`**: Compress or extract archives seamlessly (`zip`, `unzip`, `tar.gz`).
+- **`stat_file`**, **`change_permissions`** (chmod), **`change_ownership`** (chown).
+- **`rename_item`**, **`create_symlink`**, **`read_symlink`**, **`truncate_file`**.
+
+### 💻 3. Command Execution & Tunneling
+- **`execute_command`**: Run bash commands natively. Supports `usePty` for interactive shell allocation.
+- **`start_port_forward`**: Start a local TCP port forward to a remote destination (acts like `ssh -L`).
+- **`stop_port_forward`**: Stop an active port forward.
+
+### 🖥️ 4. Sysadmin & Monitoring
+- **`get_system_info`**: Retrieve base OS and uptime data.
+- **`get_hardware_info`**: Fetch deep hardware metrics via `lscpu`, `free -m`, `lsblk`, and `lspci`.
+- **`get_processes`**: A native Task Manager! Fetches top running processes sorted by CPU or RAM.
+- **`get_network_stats`**: View active network connections and listening ports via `ss -tulpn`.
+- **`manage_service`**: Wrap `systemctl` to start, stop, restart, or enable background services.
+- **`manage_firewall`**: Wrap `ufw` to allow/deny specific ports and protocols.
+- **`read_system_logs`**: Hook into `journalctl` to safely tail system or service logs without freezing the console.
+- **`manage_cron`**: Safely list, add, or remove scheduled cron jobs.
+
+### 🌐 5. Web Servers & Security
+- **`manage_nginx`**: Test configuration syntax, reload, restart, or check NGINX status.
+- **`manage_ssl`**: Issue new SSL certificates automatically using Certbot (`--nginx`) or renew existing ones.
+
+### 🚀 6. Developer Ops (Docker & Databases)
+- **`manage_docker`**: Natively list containers, start/stop/restart them, inspect configs, or securely tail logs.
+- **`execute_sql`**: Execute raw SQL queries securely. Supports **MySQL**, **PostgreSQL**, and **SQLite**.
+- **`manage_redis`**: Interface natively with Redis instances. Fetch keys, set/get values, flush DBs, or pass raw `redis-cli` commands.
+
+### 📦 7. Language Environments (Node/Python/Git)
+- **`manage_git`**: Clone repositories, pull updates, check status, and checkout branches securely.
+- **`manage_nvm`**: Install and switch Node.js versions seamlessly (auto-sources `nvm.sh`).
+- **`manage_npm`**: Install local/global packages, run NPM scripts, or audit modules.
+- **`manage_pm2`**: Manage Node daemon processes via PM2. Start, stop, list, monitor logs, and save states.
+- **`manage_python`**: Manage virtual environments, list pip packages, and run python scripts cleanly.
+- **`manage_pytest`**: Orchestrate test suites. Includes automatic dependency installation (`pytest-cov`), targeted test running, and coverage report generation inside your specific virtual environments.
+
+---
+
+## ⚙️ Usage
 
 Add the following configuration to your MCP client (e.g., Claude Desktop config file):
 
 ```json
 {
   "mcpServers": {
-    "vps": {
+    "vps-mcp": {
       "command": "npx",
       "args": ["-y", "vps-mcp"]
     }
@@ -37,8 +79,8 @@ Add the following configuration to your MCP client (e.g., Claude Desktop config 
 }
 ```
 
-## Support
+## 💖 Support
 
-If you find this project useful, consider supporting me on Patreon:
+If you find this project useful, consider supporting the original author on Patreon:
 
 [![Patreon](https://img.shields.io/badge/Patreon-Donate-FF5722)](https://patreon.com/harjjot) or click [here](https://patreon.com/harjjot) to donate.
