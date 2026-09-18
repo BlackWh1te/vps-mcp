@@ -1191,23 +1191,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // --- THE HOLY GRAIL SUITES ---
       case 'manage_git': {
-        const args = z.object({ action: z.enum(['clone', 'pull', 'status', 'checkout', 'add', 'commit', 'push']), repo: z.string().optional(), path: z.string(), branch: z.string().optional(), message: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ action: z.enum(['clone', 'pull', 'status', 'checkout', 'add', 'commit', 'push', 'log', 'branch', 'create_branch', 'reset', 'config']), repo: z.string().optional(), path: z.string(), branch: z.string().optional(), message: z.string().optional(), name: z.string().optional(), email: z.string().optional(), limit: z.number().default(10), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
         if (args.action === 'clone') {
             if (!args.repo) throw new McpError(ErrorCode.InvalidParams, "repo is required for clone");
             cmd = `git clone ${args.repo} "${args.path}"`;
         } else {
-            cmd = `cd "${args.path}" && git ${args.action}`;
+            cmd = `cd "${args.path}" && git `;
             if (args.action === 'checkout') {
                 if (!args.branch) throw new McpError(ErrorCode.InvalidParams, "branch is required for checkout");
-                cmd += ` ${args.branch}`;
+                cmd += `checkout ${args.branch}`;
+            } else if (args.action === 'create_branch') {
+                if (!args.branch) throw new McpError(ErrorCode.InvalidParams, "branch is required for create_branch");
+                cmd += `checkout -b ${args.branch}`;
             } else if (args.action === 'add') {
-                cmd = `cd "${args.path}" && git add .`;
+                cmd += `add .`;
             } else if (args.action === 'commit') {
                 if (!args.message) throw new McpError(ErrorCode.InvalidParams, "message required for commit");
-                cmd = `cd "${args.path}" && git commit -m "${args.message.replace(/"/g, '\\"')}"`;
+                cmd += `commit -m "${args.message.replace(/"/g, '\\"')}"`;
             } else if (args.action === 'push') {
-                cmd = `cd "${args.path}" && git push`;
+                cmd += `push`;
+            } else if (args.action === 'log') {
+                cmd += `log -n ${args.limit} --oneline`;
+            } else if (args.action === 'branch') {
+                cmd += `branch -a`;
+            } else if (args.action === 'reset') {
+                cmd += `reset --hard`;
+            } else if (args.action === 'config') {
+                if (!args.name || !args.email) throw new McpError(ErrorCode.InvalidParams, "name and email required for config");
+                cmd += `config user.name "${args.name.replace(/"/g, '\\"')}" && git config user.email "${args.email.replace(/"/g, '\\"')}"`;
+            } else {
+                cmd += args.action; // status, pull
             }
         }
         const result = await getClient(args.connectionName).executeCommand(cmd, true);

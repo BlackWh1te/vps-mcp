@@ -1,4 +1,4 @@
-# VPS MCP Server (v11.0.0 - Ultimate Edition)
+# VPS MCP Server (v12.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
