@@ -949,15 +949,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'manage_nextjs',
-        description: 'Next.js specific utilities (clear cache, build).',
+        description: 'Ultimate Next.js WebDev Suite: build, lint, clear cache, bundle analysis, and shadcn-ui injection.',
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', enum: ['clear_cache', 'build'] },
+            action: { type: 'string', enum: ['clear_cache', 'build', 'lint', 'analyze_bundle', 'shadcn_add'] },
             path: { type: 'string', description: 'Path to the Next.js project directory' },
+            component: { type: 'string', description: 'Component name (only required for shadcn_add)' },
             connectionName: { type: 'string' }
           },
           required: ['action', 'path']
+        }
+      },
+      {
+        name: 'run_npx_command',
+        description: 'Run arbitrary NPX CLI commands (e.g. create-next-app, drizzle-kit, tailwindcss init, etc).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            command: { type: 'string', description: 'The exact npx command to run (e.g. "npx create-next-app@latest my-app")' },
+            path: { type: 'string', description: 'Directory to run the command in' },
+            connectionName: { type: 'string' }
+          },
+          required: ['command', 'path']
         }
       },
       {
@@ -1131,7 +1145,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'execute_command': {
-        const args = z.object({ command: z.string(), usePty: z.boolean().default(true), timeout: z.number().default(0), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ command: z.string(), usePty: z.boolean().default(true), timeout: z.number().default(120000), connectionName: z.string().optional() }).parse(request.params.arguments);
         const result = await getClient(args.connectionName).executeCommand(args.command, args.usePty, args.timeout);
         return { content: [{ type: 'text', text: `STDOUT:\n${result.stdout}\n\nSTDERR:\n${result.stderr}\n\nExit Code: ${result.code}` }] };
       }
@@ -1831,7 +1845,17 @@ ${result.stderr}` }] };
         const args = z.object({ action: z.enum(['read', 'update']), path: z.string(), key: z.string().optional(), value: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
         if (args.action === 'read') {
-            cmd = `cat "${args.path}" | grep -v '^#' | grep '=' | awk -F '=' '{print "\""$1"\": \""$2"\","}' | sed '$ s/,$//' | sed '1 i\{' | sed '$ a\}'`;
+            const raw = await getClient(args.connectionName).executeCommand(`cat ${escapeShellArg(args.path)}`, false);
+            const lines = raw.stdout.split('\n');
+            const envObj: Record<string, string> = {};
+            for (const line of lines) {
+                if (line.trim().startsWith('#') || !line.includes('=')) continue;
+                const splitIdx = line.indexOf('=');
+                const key = line.slice(0, splitIdx).trim();
+                const val = line.slice(splitIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+                if (key) envObj[key] = val;
+            }
+            return { content: [{ type: 'text', text: `.env Contents:\n\n${JSON.stringify(envObj, null, 2)}` }] };
         } else if (args.action === 'update') {
             if (!args.key || args.value === undefined) throw new McpError(ErrorCode.InvalidParams, "key and value required for update");
             cmd = `touch "${args.path}" && sed -i '/^${args.key}=/d' "${args.path}" && echo "${args.key}=\"${args.value.replace(/"/g, '\"')}\"" >> "${args.path}"`;

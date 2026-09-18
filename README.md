@@ -1,4 +1,4 @@
-# VPS MCP Server (v17.0.0 - Ultimate Edition)
+# VPS MCP Server (v18.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -46,6 +46,17 @@ est_stats action. Instead of parsing systemctl logs, this pings Lavalink's nativ
 clone to automatically sync your .sql.gz database backups offsite to AWS S3, Google Drive, or Cloudflare R2 for true disaster recovery.
 - **db_optimize**: Hardcore DBA tooling. Triggers VACUUM FULL ANALYZE on Postgres or OPTIMIZE TABLE on MySQL to defragment storage, and parses pg_stat_statements to find exact slow queries.
 - **	ail_live_logs**: True Observability. Opens a live 	ail -f stream on any log file for a specific duration (e.g. 15 seconds) to catch bugs exactly as users trigger them in real-time.
+
+### 🌐 18. The Ultimate WebDev Suite (NEW!)
+- **
+un_npx_command**: A dedicated runner for arbitrary NPX workflows. Need to scaffold a project (
+px create-next-app), push a schema (
+px drizzle-kit push), or initialize Tailwind? The AI can now do it natively.
+- **manage_nextjs (Supercharged)**: Now supports native 
+pm run lint, ANALYZE=true npm run build for Webpack bundle analysis, and a dedicated shadcn_add action to instantly inject UI components via 
+px shadcn-ui@latest add <component>.
+- **manage_npm**: Existing, but fully featured NPM manager for install, install_global, udit, and 
+un_script.
 
 ---
 

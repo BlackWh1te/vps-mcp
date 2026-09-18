@@ -1,6 +1,6 @@
 {
   "name": "vps-mcp",
-  "version": "17.1.0",
+  "version": "18.0.0",
   "description": "MCP server for VPS management via SSH",
   "main": "dist/index.js",
   "bin": {
