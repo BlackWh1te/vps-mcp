@@ -1,6 +1,6 @@
 {
   "name": "vps-mcp",
-  "version": "1.0.2",
+  "version": "16.0.0",
   "description": "MCP server for VPS management via SSH",
   "main": "dist/index.js",
   "bin": {
@@ -16,15 +16,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/HarjjotSinghh/vps-mcp.git"
+    "url": "git+https://github.com/BlackWh1te/vps-mcp.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/HarjjotSinghh/vps-mcp/issues"
+    "url": "https://github.com/BlackWh1te/vps-mcp/issues"
   },
-  "homepage": "https://github.com/HarjjotSinghh/vps-mcp#readme",
+  "homepage": "https://github.com/BlackWh1te/vps-mcp#readme",
   "devDependencies": {
     "@types/node": "^25.0.9",
     "@types/ssh2": "^1.15.5",
