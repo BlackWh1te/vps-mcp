@@ -15,7 +15,7 @@ dotenv.config();
 const server = new Server(
   {
     name: 'vps-mcp',
-    version: '4.0.0',
+    version: '5.0.0',
   },
   {
     capabilities: {
@@ -452,8 +452,118 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ['action']
         }
+      },
+
+      // --- THE HOLY GRAIL SUITES ---
+      {
+        name: 'manage_git',
+        description: 'Manage Git repositories (clone, pull, status, checkout).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['clone', 'pull', 'status', 'checkout'] },
+            repo: { type: 'string', description: 'Repository URL (for clone)' },
+            path: { type: 'string', description: 'Path to repository (for all actions)' },
+            branch: { type: 'string', description: 'Branch name (for checkout)' },
+            connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
+          },
+          required: ['action', 'path']
+        }
+      },
+      {
+        name: 'manage_firewall',
+        description: 'Manage UFW Firewall (allow, deny, status, enable, disable).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['status', 'allow', 'deny', 'enable', 'disable'] },
+            port: { type: 'string', description: 'Port number or service name (e.g. "80", "443", "ssh")' },
+            protocol: { type: 'string', enum: ['tcp', 'udp', 'any'], description: 'Protocol (defaults to any)' },
+            connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'get_network_stats',
+        description: 'View active network connections and listening ports (ss/netstat).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['listen', 'all'], description: 'Show listening ports or all connections' },
+            connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'manage_nginx',
+        description: 'Manage NGINX Web Server (test, reload, restart, status).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['test', 'reload', 'restart', 'status'] },
+            connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'manage_ssl',
+        description: 'Manage SSL Certificates with Certbot (issue, renew).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['issue', 'renew'] },
+            domain: { type: 'string', description: 'Domain name for the certificate' },
+            email: { type: 'string', description: 'Email for registration/recovery' },
+            connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'read_system_logs',
+        description: 'Read system or service logs using journalctl.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            service: { type: 'string', description: 'Service name (e.g., nginx, docker). Leave empty for system logs.' },
+            lines: { type: 'number', description: 'Number of lines to fetch (default 100)' },
+            connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
+          }
+        }
+      },
+      {
+        name: 'manage_cron',
+        description: 'Manage Cron jobs (list, add, remove).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['list', 'add', 'remove'] },
+            schedule: { type: 'string', description: 'Cron schedule expression (e.g., "0 0 * * *")' },
+            command: { type: 'string', description: 'Command to execute (used for add, or as matching string for remove)' },
+            connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'manage_archive',
+        description: 'Compress or extract archives (zip, tar.gz).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['compress_zip', 'extract_zip', 'compress_tar', 'extract_tar'] },
+            target: { type: 'string', description: 'Archive file path' },
+            source: { type: 'string', description: 'Directory to compress, or extraction destination' },
+            connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
+          },
+          required: ['action', 'target', 'source']
+        }
       }
     ],
+
   };
 });
 
@@ -772,7 +882,100 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: 'text', text: `Redis ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
       }
 
+
+      // --- THE HOLY GRAIL SUITES ---
+      case 'manage_git': {
+        const args = z.object({ action: z.enum(['clone', 'pull', 'status', 'checkout']), repo: z.string().optional(), path: z.string(), branch: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'clone') {
+            if (!args.repo) throw new McpError(ErrorCode.InvalidParams, "repo is required for clone");
+            cmd = `git clone ${args.repo} "${args.path}"`;
+        } else {
+            cmd = `cd "${args.path}" && git ${args.action}`;
+            if (args.action === 'checkout') {
+                if (!args.branch) throw new McpError(ErrorCode.InvalidParams, "branch is required for checkout");
+                cmd += ` ${args.branch}`;
+            }
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `Git ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_firewall': {
+        const args = z.object({ action: z.enum(['status', 'allow', 'deny', 'enable', 'disable']), port: z.string().optional(), protocol: z.enum(['tcp', 'udp', 'any']).default('any'), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = `sudo ufw ${args.action}`;
+        if (['allow', 'deny'].includes(args.action)) {
+            if (!args.port) throw new McpError(ErrorCode.InvalidParams, "port is required for allow/deny");
+            cmd += ` ${args.port}${args.protocol !== 'any' ? '/' + args.protocol : ''}`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `UFW Firewall:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'get_network_stats': {
+        const args = z.object({ action: z.enum(['listen', 'all']), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const flags = args.action === 'listen' ? '-tulpn' : '-tupn';
+        const result = await getClient(args.connectionName).executeCommand(`sudo ss ${flags}`, true);
+        return { content: [{ type: 'text', text: `Network Stats:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_nginx': {
+        const args = z.object({ action: z.enum(['test', 'reload', 'restart', 'status']), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'test') cmd = `sudo nginx -t`;
+        else cmd = `sudo systemctl ${args.action} nginx`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `NGINX ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_ssl': {
+        const args = z.object({ action: z.enum(['issue', 'renew']), domain: z.string().optional(), email: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'issue') {
+            if (!args.domain || !args.email) throw new McpError(ErrorCode.InvalidParams, "domain and email required to issue SSL");
+            cmd = `sudo certbot --nginx -d ${args.domain} --non-interactive --agree-tos -m ${args.email}`;
+        } else {
+            cmd = `sudo certbot renew`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `Certbot ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'read_system_logs': {
+        const args = z.object({ service: z.string().optional(), lines: z.number().default(100), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = `sudo journalctl -n ${args.lines} --no-pager`;
+        if (args.service) cmd += ` -u ${args.service}`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `System Logs:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_cron': {
+        const args = z.object({ action: z.enum(['list', 'add', 'remove']), schedule: z.string().optional(), command: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'list') cmd = `crontab -l`;
+        else if (args.action === 'add') {
+            if (!args.schedule || !args.command) throw new McpError(ErrorCode.InvalidParams, "schedule and command required");
+            cmd = `(crontab -l 2>/dev/null; echo "${args.schedule} ${args.command}") | crontab -`;
+        } else if (args.action === 'remove') {
+            if (!args.command) throw new McpError(ErrorCode.InvalidParams, "command required to remove cron");
+            cmd = `crontab -l | grep -v "${args.command}" | crontab -`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Cron ${args.action}:\n\n${result.stdout || 'Success'}\n${result.stderr}` }] };
+      }
+
+      case 'manage_archive': {
+        const args = z.object({ action: z.enum(['compress_zip', 'extract_zip', 'compress_tar', 'extract_tar']), target: z.string(), source: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'compress_zip') cmd = `zip -r "${args.target}" "${args.source}"`;
+        else if (args.action === 'extract_zip') cmd = `unzip "${args.target}" -d "${args.source}"`;
+        else if (args.action === 'compress_tar') cmd = `tar -czvf "${args.target}" -C "${args.source}" .`;
+        else if (args.action === 'extract_tar') cmd = `tar -xzvf "${args.target}" -C "${args.source}"`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Archive ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
       default:
+
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);
     }
   } catch (error: any) {
