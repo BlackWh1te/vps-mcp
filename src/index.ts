@@ -15,7 +15,7 @@ dotenv.config();
 const server = new Server(
   {
     name: 'vps-mcp',
-    version: '3.0.0',
+    version: '4.0.0',
   },
   {
     capabilities: {
@@ -311,7 +311,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       
-      // --- NEW SYSADMIN SUITE ---
+      // --- SYSADMIN COMMANDS ---
       {
         name: 'get_system_info',
         description: 'Get basic system information (OS, Uptime) from the VPS.',
@@ -333,8 +333,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['serviceName', 'action']
         }
       },
-
-      // --- BRAND NEW: COMPREHENSIVE VPS MANAGEMENT SUITE ---
       {
         name: 'get_hardware_info',
         description: 'Get full hardware and driver data from the VPS (CPU, RAM, Disk, Block Devices, PCI).',
@@ -396,10 +394,71 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ['dbType', 'query', 'dbName']
         }
+      },
+
+      // --- BRAND NEW: DEVELOPER & NODEJS SUITE (NVM, NPM, PM2, REDIS) ---
+      {
+        name: 'manage_nvm',
+        description: 'Manage Node.js versions using NVM (Node Version Manager).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['install', 'use', 'list', 'current'] },
+            version: { type: 'string', description: 'Node.js version (e.g., "20", "18.16.0"). Required for install/use.' },
+            ...connectionProp
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'manage_npm',
+        description: 'Manage Node.js packages and scripts via NPM.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['install', 'install_global', 'remove', 'run_script', 'init', 'audit'] },
+            target: { type: 'string', description: 'Package name (for install/remove) or script name (for run_script).' },
+            path: { type: 'string', description: 'Directory to run the npm command in. Defaults to CWD.' },
+            ...connectionProp
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'manage_pm2',
+        description: 'Manage Node.js daemon processes using PM2.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['list', 'start', 'stop', 'restart', 'logs', 'delete', 'save', 'flush'] },
+            target: { type: 'string', description: 'App name, id, "all", or script path (for start)' },
+            ...connectionProp
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'manage_redis',
+        description: 'Interact with Redis database via redis-cli.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['info', 'keys', 'get', 'set', 'delete', 'flushall', 'raw'] },
+            key: { type: 'string', description: 'Redis key (for get, set, delete) or pattern (for keys)' },
+            value: { type: 'string', description: 'Redis value (for set)' },
+            query: { type: 'string', description: 'Raw Redis command (for raw action, e.g., "HGETALL myhash")' },
+            db: { type: 'number', description: 'Database index (default 0)' },
+            ...connectionProp
+          },
+          required: ['action']
+        }
       }
     ],
   };
 });
+
+// Helper for NVM source
+const NVM_SOURCE = `export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh";`;
 
 // Handle Tool Calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -439,29 +498,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             agent: agent
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Successfully connected to ${args.username}@${args.host} as '${args.connectionName}'. CWD: ${sshClient.getCwd()}`,
-            },
-          ],
-        };
+        return { content: [{ type: 'text', text: `Successfully connected to ${args.username}@${args.host} as '${args.connectionName}'. CWD: ${sshClient.getCwd()}` }] };
       }
 
       case 'list_connections': {
         const active = Array.from(connections.entries())
             .filter(([_, client]) => client.isConnected())
             .map(([name, client]) => `- ${name} (CWD: ${client.getCwd()})`);
-        
-        return {
-            content: [{ type: 'text', text: active.length > 0 ? active.join('\n') : 'No active connections.' }]
-        };
+        return { content: [{ type: 'text', text: active.length > 0 ? active.join('\n') : 'No active connections.' }] };
       }
 
       case 'disconnect_vps': {
         const args = z.object({ connectionName: z.string().default('default'), all: z.boolean().optional() }).parse(request.params.arguments);
-        
         if (args.all) {
             let count = 0;
             for (const [name, client] of connections.entries()) {
@@ -486,9 +534,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'execute_command': {
         const args = z.object({ command: z.string(), usePty: z.boolean().default(true), connectionName: z.string().optional() }).parse(request.params.arguments);
         const result = await getClient(args.connectionName).executeCommand(args.command, args.usePty);
-        return {
-          content: [{ type: 'text', text: `STDOUT:\n${result.stdout}\n\nSTDERR:\n${result.stderr}\n\nExit Code: ${result.code}` }],
-        };
+        return { content: [{ type: 'text', text: `STDOUT:\n${result.stdout}\n\nSTDERR:\n${result.stderr}\n\nExit Code: ${result.code}` }] };
       }
 
       case 'list_directory': {
@@ -605,97 +651,53 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // --- SYSADMIN COMMANDS ---
       case 'get_system_info': {
         const args = z.object({ connectionName: z.string().optional() }).parse(request.params.arguments);
-        const client = getClient(args.connectionName);
         const cmd = "echo '--- OS ---'; uname -a; echo '--- Uptime ---'; uptime;";
-        const result = await client.executeCommand(cmd, false);
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: result.stdout || result.stderr }] };
       }
 
       case 'manage_service': {
         const args = z.object({ serviceName: z.string(), action: z.enum(['start', 'stop', 'restart', 'status', 'enable', 'disable']), connectionName: z.string().optional() }).parse(request.params.arguments);
-        const client = getClient(args.connectionName);
         const cmd = `sudo systemctl ${args.action} ${args.serviceName}`;
-        const result = await client.executeCommand(cmd, true); // PTY true to help with sudo if needed
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
         return { content: [{ type: 'text', text: `Executed: ${cmd}\n\nSTDOUT:\n${result.stdout}\n\nSTDERR:\n${result.stderr}\nCode: ${result.code}` }] };
       }
 
-      // --- BRAND NEW: COMPREHENSIVE VPS MANAGEMENT SUITE ---
-
       case 'get_hardware_info': {
         const args = z.object({ connectionName: z.string().optional() }).parse(request.params.arguments);
-        const client = getClient(args.connectionName);
         const cmd = `echo "=== CPU ==="; lscpu; echo "\\n=== RAM ==="; free -m; echo "\\n=== DISK ==="; df -h; echo "\\n=== BLOCK DEVICES ==="; lsblk; echo "\\n=== PCI DRIVERS ==="; lspci`;
-        const result = await client.executeCommand(cmd, false);
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: result.stdout || result.stderr }] };
       }
 
       case 'get_processes': {
         const args = z.object({ sortBy: z.enum(['cpu', 'mem']).default('cpu'), limit: z.number().default(20), connectionName: z.string().optional() }).parse(request.params.arguments);
-        const client = getClient(args.connectionName);
         const sortFlag = args.sortBy === 'cpu' ? '-%cpu' : '-%mem';
         const cmd = `ps -eo pid,ppid,user,%cpu,%mem,start,time,command --sort=${sortFlag} | head -n ${args.limit + 1}`;
-        const result = await client.executeCommand(cmd, false);
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: result.stdout || result.stderr }] };
       }
 
       case 'manage_docker': {
-        const args = z.object({
-            action: z.enum(['list', 'start', 'stop', 'restart', 'logs', 'inspect']),
-            containerId: z.string().optional(),
-            connectionName: z.string().optional()
-        }).parse(request.params.arguments);
-        const client = getClient(args.connectionName);
-        
-        let cmd = '';
-        if (args.action === 'list') {
-            cmd = `docker ps -a`;
-        } else {
-            if (!args.containerId) throw new McpError(ErrorCode.InvalidParams, `containerId is required for action '${args.action}'`);
-            if (args.action === 'logs') {
-                cmd = `docker logs --tail 100 ${args.containerId}`;
-            } else {
-                cmd = `docker ${args.action} ${args.containerId}`;
-            }
-        }
-        
-        const result = await client.executeCommand(`sudo ${cmd}`, true);
+        const args = z.object({ action: z.enum(['list', 'start', 'stop', 'restart', 'logs', 'inspect']), containerId: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = args.action === 'list' ? `docker ps -a` : `docker ${args.action === 'logs' ? 'logs --tail 100' : args.action} ${args.containerId}`;
+        const result = await getClient(args.connectionName).executeCommand(`sudo ${cmd}`, true);
         return { content: [{ type: 'text', text: `Docker ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
       }
 
       case 'manage_python': {
-        const args = z.object({
-            action: z.enum(['list_packages', 'create_venv', 'run_script']),
-            target: z.string(),
-            connectionName: z.string().optional()
-        }).parse(request.params.arguments);
-        const client = getClient(args.connectionName);
-        
+        const args = z.object({ action: z.enum(['list_packages', 'create_venv', 'run_script']), target: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
-        if (args.action === 'list_packages') {
-            cmd = `source ${args.target}/bin/activate && pip freeze`;
-        } else if (args.action === 'create_venv') {
-            cmd = `python3 -m venv ${args.target}`;
-        } else if (args.action === 'run_script') {
-            cmd = `python3 ${args.target}`;
-        }
-        
-        const result = await client.executeCommand(cmd, true);
+        if (args.action === 'list_packages') cmd = `source ${args.target}/bin/activate && pip freeze`;
+        else if (args.action === 'create_venv') cmd = `python3 -m venv ${args.target}`;
+        else if (args.action === 'run_script') cmd = `python3 ${args.target}`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
         return { content: [{ type: 'text', text: `Python ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
       }
 
       case 'execute_sql': {
-        const args = z.object({
-            dbType: z.enum(['mysql', 'postgres', 'sqlite']),
-            query: z.string(),
-            dbName: z.string(),
-            user: z.string().optional(),
-            password: z.string().optional(),
-            connectionName: z.string().optional()
-        }).parse(request.params.arguments);
-        
-        const client = getClient(args.connectionName);
+        const args = z.object({ dbType: z.enum(['mysql', 'postgres', 'sqlite']), query: z.string(), dbName: z.string(), user: z.string().optional(), password: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
-        
         if (args.dbType === 'mysql') {
             const u = args.user ? `-u ${args.user}` : '';
             const p = args.password ? `-p${args.password}` : '';
@@ -707,9 +709,67 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         } else if (args.dbType === 'sqlite') {
             cmd = `sqlite3 ${args.dbName} "${args.query.replace(/"/g, '\\"')}"`;
         }
-        
-        const result = await client.executeCommand(cmd, false);
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `SQL Query Output:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      // --- NODE.JS / DEVELOPER SUITE ---
+      case 'manage_nvm': {
+        const args = z.object({ action: z.enum(['install', 'use', 'list', 'current']), version: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'list' || args.action === 'current') {
+            cmd = `${NVM_SOURCE} nvm ${args.action}`;
+        } else {
+            if (!args.version) throw new McpError(ErrorCode.InvalidParams, `Version required for ${args.action}`);
+            cmd = `${NVM_SOURCE} nvm ${args.action} ${args.version}`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `NVM ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_npm': {
+        const args = z.object({ action: z.enum(['install', 'install_global', 'remove', 'run_script', 'init', 'audit']), target: z.string().optional(), path: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = `${NVM_SOURCE} `;
+        if (args.path) cmd += `cd "${args.path}" && `;
+        
+        switch (args.action) {
+            case 'install': cmd += `npm install ${args.target || ''}`; break;
+            case 'install_global': cmd += `npm install -g ${args.target}`; break;
+            case 'remove': cmd += `npm uninstall ${args.target}`; break;
+            case 'run_script': cmd += `npm run ${args.target}`; break;
+            case 'init': cmd += `npm init -y`; break;
+            case 'audit': cmd += `npm audit`; break;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `NPM ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_pm2': {
+        const args = z.object({ action: z.enum(['list', 'start', 'stop', 'restart', 'logs', 'delete', 'save', 'flush']), target: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = `${NVM_SOURCE} npx pm2 ${args.action}`;
+        if (['start', 'stop', 'restart', 'logs', 'delete'].includes(args.action)) {
+            if (!args.target) throw new McpError(ErrorCode.InvalidParams, `Target required for ${args.action}`);
+            cmd += ` ${args.target}`;
+        }
+        if (args.action === 'logs') cmd += ` --lines 100 --nostream`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `PM2 ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_redis': {
+        const args = z.object({ action: z.enum(['info', 'keys', 'get', 'set', 'delete', 'flushall', 'raw']), key: z.string().optional(), value: z.string().optional(), query: z.string().optional(), db: z.number().default(0), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = `redis-cli -n ${args.db} `;
+        switch (args.action) {
+            case 'info': cmd += `INFO`; break;
+            case 'keys': cmd += `KEYS "${args.key || '*'}"`; break;
+            case 'get': cmd += `GET "${args.key}"`; break;
+            case 'set': cmd += `SET "${args.key}" "${args.value}"`; break;
+            case 'delete': cmd += `DEL "${args.key}"`; break;
+            case 'flushall': cmd += `FLUSHALL`; break;
+            case 'raw': cmd += args.query; break;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `Redis ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
       }
 
       default:
