@@ -1,4 +1,4 @@
-# VPS MCP Server (v16.0.0 - Ultimate Edition)
+# VPS MCP Server (v17.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -38,6 +38,14 @@ pm run build.
 - **get_recent_crashes**: The ultimate Error Aggregator. One command pulls the latest 50 priority-3 error logs from both journalctl (System) and pm2 logs --err (Node) simultaneously to instantly find the root cause of any outage.
 - **manage_lavalink (REST Upgraded)**: Added 
 est_stats action. Instead of parsing systemctl logs, this pings Lavalink's native /v4/stats API endpoint to return active players, memory allocation, and CPU load in precise JSON formatting!
+
+### 🌩️ 17. The God-Tier SRE Suite (NEW!)
+- **manage_fail2ban**: Active Intrusion Defense. Instantly view jailed malicious IPs, and manually ban/unban addresses that are scraping or brute-forcing your server.
+- **nalyze_web_traffic**: Parses /var/log/nginx/access.log to generate a live report of the top 15 IP addresses and URLs hitting your server, catching DDoS attempts instantly.
+- **manage_cloud_sync**: Integrates with 
+clone to automatically sync your .sql.gz database backups offsite to AWS S3, Google Drive, or Cloudflare R2 for true disaster recovery.
+- **db_optimize**: Hardcore DBA tooling. Triggers VACUUM FULL ANALYZE on Postgres or OPTIMIZE TABLE on MySQL to defragment storage, and parses pg_stat_statements to find exact slow queries.
+- **	ail_live_logs**: True Observability. Opens a live 	ail -f stream on any log file for a specific duration (e.g. 15 seconds) to catch bugs exactly as users trigger them in real-time.
 
 ---
 

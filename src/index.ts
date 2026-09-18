@@ -965,7 +965,76 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           }
         }
       }
+
+      ,{
+        name: 'manage_fail2ban',
+        description: 'Active Intrusion Defense: View fail2ban jails, banned IPs, or manually ban/unban.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['status', 'banned_ips', 'ban', 'unban'] },
+            jail: { type: 'string', description: 'Jail name (e.g. sshd)', default: 'sshd' },
+            ip: { type: 'string', description: 'IP address to ban/unban' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'analyze_web_traffic',
+        description: 'Parse Nginx access logs to instantly find top IP addresses hitting your server (DDoS/Scraper detection).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            logPath: { type: 'string', default: '/var/log/nginx/access.log' },
+            lines: { type: 'number', default: 5000 },
+            connectionName: { type: 'string' }
+          }
+        }
+      },
+      {
+        name: 'manage_cloud_sync',
+        description: 'Sync local backups offsite to S3, Google Drive, or R2 using rclone.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['sync', 'list_remotes'] },
+            source: { type: 'string', description: 'Local directory or file to sync' },
+            remoteDest: { type: 'string', description: 'Remote destination (e.g. s3:my-bucket/backups)' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'db_optimize',
+        description: 'Run advanced DBA commands like VACUUM ANALYZE (Postgres) or check slow query logs.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            dbType: { type: 'string', enum: ['postgres', 'mysql'] },
+            action: { type: 'string', enum: ['vacuum', 'slow_queries'] },
+            dbName: { type: 'string' },
+            connectionName: { type: 'string' }
+          },
+          required: ['dbType', 'action', 'dbName']
+        }
+      },
+      {
+        name: 'tail_live_logs',
+        description: 'Stream a log file in real-time for X seconds to capture live events.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Path to log file (or journalctl command)' },
+            seconds: { type: 'number', description: 'Seconds to listen', default: 10 },
+            connectionName: { type: 'string' }
+          },
+          required: ['path']
+        }
+      }
     ],
+
 
 
 
@@ -1189,7 +1258,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'get_hardware_info': {
         const args = z.object({ connectionName: z.string().optional() }).parse(request.params.arguments);
-        const cmd = `echo "=== CPU ==="; lscpu; echo "\\n=== RAM ==="; free -m; echo "\\n=== DISK ==="; df -h; echo "\\n=== BLOCK DEVICES ==="; lsblk; echo "\\n=== PCI DRIVERS ==="; lspci`;
+        const cmd = `echo "=== CPU ==="; lscpu; echo "\n=== RAM ==="; free -m; echo "\n=== DISK ==="; df -h; echo "\n=== BLOCK DEVICES ==="; lsblk; echo "\n=== PCI DRIVERS ==="; lspci`;
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: result.stdout || result.stderr }] };
       }
@@ -1824,7 +1893,81 @@ ${result.stderr}` }] };
 ${result.stdout}
 ${result.stderr}` }] };
       }
+
+      case 'manage_fail2ban': {
+        const args = z.object({ action: z.enum(['status', 'banned_ips', 'ban', 'unban']), jail: z.string().default('sshd'), ip: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'status') cmd = `sudo fail2ban-client status ${args.jail}`;
+        else if (args.action === 'banned_ips') cmd = `sudo fail2ban-client status ${args.jail} | grep "Banned IP list"`;
+        else if (args.action === 'ban') {
+            if (!args.ip) throw new McpError(ErrorCode.InvalidParams, "IP required for ban");
+            cmd = `sudo fail2ban-client set ${args.jail} banip ${args.ip}`;
+        } else if (args.action === 'unban') {
+            if (!args.ip) throw new McpError(ErrorCode.InvalidParams, "IP required for unban");
+            cmd = `sudo fail2ban-client set ${args.jail} unbanip ${args.ip}`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Fail2Ban ${args.action}:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'analyze_web_traffic': {
+        const args = z.object({ logPath: z.string().default('/var/log/nginx/access.log'), lines: z.number().default(5000), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = `echo "Top 15 IP Addresses:" && tail -n ${args.lines} ${args.logPath} | awk '{print $1}' | sort | uniq -c | sort -nr | head -n 15 && echo "\nTop 15 Requested URLs:" && tail -n ${args.lines} ${args.logPath} | awk '{print $7}' | sort | uniq -c | sort -nr | head -n 15`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Traffic Analysis (${args.lines} lines):
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'manage_cloud_sync': {
+        const args = z.object({ action: z.enum(['sync', 'list_remotes']), source: z.string().optional(), remoteDest: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'list_remotes') cmd = `rclone listremotes`;
+        else if (args.action === 'sync') {
+            if (!args.source || !args.remoteDest) throw new McpError(ErrorCode.InvalidParams, "Source and remoteDest required for sync");
+            cmd = `rclone sync -P "${args.source}" "${args.remoteDest}"`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Cloud Sync ${args.action}:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'db_optimize': {
+        const args = z.object({ dbType: z.enum(['postgres', 'mysql']), action: z.enum(['vacuum', 'slow_queries']), dbName: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'vacuum') {
+            if (args.dbType === 'postgres') cmd = `sudo -u postgres psql -d ${args.dbName} -c "VACUUM FULL ANALYZE;"`;
+            else cmd = `mysql -e "OPTIMIZE TABLE $(mysql -N -B -e 'SHOW TABLES;' ${args.dbName} | tr '\n' ',' | sed 's/,$//');" ${args.dbName}`;
+        } else if (args.action === 'slow_queries') {
+            if (args.dbType === 'postgres') cmd = `sudo -u postgres psql -d ${args.dbName} -c "SELECT query, calls, total_exec_time, mean_exec_time FROM pg_stat_statements ORDER BY mean_exec_time DESC LIMIT 10;" || echo "pg_stat_statements not enabled."`;
+            else cmd = `sudo tail -n 50 /var/log/mysql/mysql-slow.log || echo "Slow query log not found or empty."`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `DB Optimize ${args.action}:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'tail_live_logs': {
+        const args = z.object({ path: z.string(), seconds: z.number().default(10), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const safeTimeout = Math.min(args.seconds, 60); // Cap at 60s to prevent MCP lockup
+        // We use executeCommand timeoutMs equal to safeTimeout + 5 seconds buffer
+        const cmd = `timeout ${safeTimeout} tail -f "${args.path}" || true`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false, (safeTimeout + 5) * 1000);
+        return { content: [{ type: 'text', text: `Live Log Capture (${safeTimeout}s):
+
+${result.stdout}
+${result.stderr}` }] };
+      }
       default:
+
 
 
 
