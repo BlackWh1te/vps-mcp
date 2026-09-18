@@ -562,7 +562,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['action', 'target', 'source']
         }
       }
+
+      ,{
+        name: 'manage_pytest',
+        description: 'Manage and run Python tests using pytest.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['run', 'run_coverage', 'install'] },
+            path: { type: 'string', description: 'Path to the test file or directory (required for run/run_coverage)' },
+            args: { type: 'string', description: 'Additional pytest arguments (e.g., "-v -s")' },
+            venvPath: { type: 'string', description: 'Path to virtual environment to activate first' },
+            connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
+          },
+          required: ['action']
+        }
+      }
     ],
+
 
   };
 });
@@ -974,7 +991,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Archive ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
       }
+
+      case 'manage_pytest': {
+        const args = z.object({
+            action: z.enum(['run', 'run_coverage', 'install']),
+            path: z.string().optional(),
+            args: z.string().default(''),
+            venvPath: z.string().optional(),
+            connectionName: z.string().optional()
+        }).parse(request.params.arguments);
+
+        let cmd = '';
+        const prefix = args.venvPath ? `source "${args.venvPath}/bin/activate" && ` : '';
+
+        if (args.action === 'install') {
+            cmd = `${prefix}pip install pytest pytest-cov`;
+        } else {
+            if (!args.path) throw new McpError(ErrorCode.InvalidParams, "path is required for run/run_coverage");
+            if (args.action === 'run') {
+                cmd = `${prefix}pytest ${args.args} "${args.path}"`;
+            } else if (args.action === 'run_coverage') {
+                cmd = `${prefix}pytest --cov="${args.path}" ${args.args} "${args.path}"`;
+            }
+        }
+        
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `PyTest ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
       default:
+
 
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);
     }
