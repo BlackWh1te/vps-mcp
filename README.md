@@ -1,4 +1,4 @@
-# VPS MCP Server (v13.0.0 - Ultimate Edition)
+# VPS MCP Server (v15.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -19,6 +19,16 @@ What started as a simple SSH wrapper has evolved into a **fully-fledged Systems 
 ### 🎵 13. The G SERVER Suite (NEW!)
 - **manage_lavalink**: A highly specialized tool requested to manage Lavalink music nodes. Run status to see the exact RAM usage of the Java process, logs to dump journalctl, or 
 estart to bounce the music node without needing raw SSH tunnels!
+
+### 💎 14. The AI Dream Compliance Suite (NEW!)
+- **search_files**: Need to instantly find \VIEWS_REGISTERED\? This tool runs raw \grep -rn\ directly on the VPS to pinpoint code snippets across thousands of files.
+- **manage_prisma**: Run \generate\, \db_push\, or \migrate_deploy\ to automatically sync your Next.js application schemas.
+- **execute_sql (Schema Update)**: Added a new \get_schema\ action that instantly dumps the exact structure, tables, and column names of the database.
+
+### 🤖 15. The Perfect DevOps & Discord Suite (NEW!)
+- **manage_env_file**: Read .env files dynamically as parsed JSON, or safely inject/update tokens (like \DISCORD_TOKEN\) without ever corrupting the bash syntax.
+- **manage_discord**: Natively validate if a Discord Bot token is alive, or force-clear stuck slash commands across the Discord API directly from the MCP.
+- **Python Package Manager (manage_python)**: Added \install_package\ to instantly pip install missing dependencies (like \discord.py\) straight into your isolated \env\.
 
 ---
 

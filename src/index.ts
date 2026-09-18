@@ -372,7 +372,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', enum: ['list_packages', 'create_venv', 'run_script', 'install_requirements'] },
+            action: { type: 'string', enum: ['list_packages', 'create_venv', 'run_script', 'install_requirements', 'install_package'] },
             target: { type: 'string', description: 'Path to venv (for list/create) or script (for run)' },
             ...connectionProp
           },
@@ -867,7 +867,66 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['action']
         }
       }
+
+      ,{
+        name: 'search_files',
+        description: 'Search for text across the codebase using grep.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Directory to search' },
+            query: { type: 'string', description: 'Text to search for' },
+            connectionName: { type: 'string' }
+          },
+          required: ['path', 'query']
+        }
+      },
+      {
+        name: 'manage_prisma',
+        description: 'Run Prisma commands (generate, db push, migrate deploy) for Node.js/Next.js projects.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['generate', 'db_push', 'migrate_deploy'] },
+            path: { type: 'string', description: 'Path to the directory containing prisma folder' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action', 'path']
+        }
+      }
+
+      ,{
+        name: 'manage_env_file',
+        description: 'Safely parse, update, or read .env files as JSON dictionaries.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['read', 'update'] },
+            path: { type: 'string', description: 'Path to the .env file' },
+            key: { type: 'string', description: 'Key to update (for update action)' },
+            value: { type: 'string', description: 'Value to set (for update action)' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action', 'path']
+        }
+      },
+      {
+        name: 'manage_discord',
+        description: 'Discord API utilities for checking tokens and clearing slash commands.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['validate_token', 'clear_slash_commands'] },
+            token: { type: 'string', description: 'Discord Bot Token' },
+            appId: { type: 'string', description: 'Discord Application ID (for clear_slash_commands)' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action', 'token']
+        }
+      }
     ],
+
+
 
 
 
@@ -1114,29 +1173,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'manage_python': {
-        const args = z.object({ action: z.enum(['list_packages', 'create_venv', 'run_script', 'install_requirements']), target: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ action: z.enum(['list_packages', 'create_venv', 'run_script', 'install_requirements', 'install_package']), target: z.string(), package_name: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
         if (args.action === 'list_packages') cmd = `source ${args.target}/bin/activate && pip freeze`;
         else if (args.action === 'create_venv') cmd = `python3 -m venv ${args.target}`;
         else if (args.action === 'run_script') cmd = `python3 ${args.target}`;
         else if (args.action === 'install_requirements') cmd = `source ${args.target}/bin/activate && pip install -r requirements.txt`;
+          else if (args.action === 'install_package') cmd = `source ${args.target}/bin/activate && pip install ${args.package_name}`; 
         const result = await getClient(args.connectionName).executeCommand(cmd, true);
         return { content: [{ type: 'text', text: `Python ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
       }
 
       case 'execute_sql': {
-        const args = z.object({ dbType: z.enum(['mysql', 'postgres', 'sqlite']), query: z.string(), dbName: z.string(), user: z.string().optional(), password: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ action: z.enum(['query', 'get_schema']).default('query'), dbType: z.enum(['mysql', 'postgres', 'sqlite']), query: z.string().optional(), dbName: z.string(), user: z.string().optional(), password: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        if (args.action === 'get_schema') {
+            if (args.dbType === 'postgres') args.query = "SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public';";
+            else if (args.dbType === 'mysql') args.query = `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = '${args.dbName}';`;
+            else args.query = "SELECT type, name, sql FROM sqlite_master WHERE type='table';";
+        }
+        if (!args.query) throw new McpError(ErrorCode.InvalidParams, "query is required if action is query");
+        const safeQuery = args.query.replace(/"/g, '\\"');
         let cmd = '';
         if (args.dbType === 'mysql') {
             const u = args.user ? `-u ${args.user}` : '';
             const passEnv = args.password ? `MYSQL_PWD='${args.password.replace(/'/g, "'\\''")}' ` : '';
-            cmd = `${passEnv}mysql ${u} -D ${args.dbName} -e "${args.query.replace(/"/g, '\\"')}"`;
+            cmd = `${passEnv}mysql ${u} -D ${args.dbName} -e "${safeQuery}"`;
         } else if (args.dbType === 'postgres') {
             const u = args.user ? `-U ${args.user}` : '';
             const passEnv = args.password ? `PGPASSWORD='${args.password.replace(/'/g, "'\\''")}' ` : '';
-            cmd = `${passEnv}psql ${u} -d ${args.dbName} -c "${args.query.replace(/"/g, '\\"')}"`;
+            cmd = `${passEnv}psql ${u} -d ${args.dbName} -c "${safeQuery}"`;
         } else if (args.dbType === 'sqlite') {
-            cmd = `sqlite3 ${args.dbName} "${args.query.replace(/"/g, '\\"')}"`;
+            cmd = `sqlite3 ${args.dbName} "${safeQuery}"`;
         }
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `SQL Query Output:\n\n${result.stdout}\n${result.stderr}` }] };
@@ -1514,7 +1581,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'diagnose_network': {
-        const args = z.object({ tool: z.enum(['ping', 'traceroute', 'dig']), target: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ tool: z.enum(['ping', 'traceroute', 'dig']), target: z.string(), package_name: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
         if (args.tool === 'ping') cmd = `ping -c 4 ${args.target}`;
         else if (args.tool === 'traceroute') cmd = `traceroute ${args.target}`;
@@ -1618,7 +1685,64 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Lavalink ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
       }
+
+      case 'search_files': {
+        const args = z.object({ path: z.string(), query: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = `grep -rn "${args.query.replace(/"/g, '\"')}" "${args.path}" | head -n 50`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Search Results:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'manage_prisma': {
+        const args = z.object({ action: z.enum(['generate', 'db_push', 'migrate_deploy']), path: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = `cd "${args.path}" && ${NVM_SOURCE} npx prisma `;
+        if (args.action === 'generate') cmd += 'generate';
+        if (args.action === 'db_push') cmd += 'db push --accept-data-loss';
+        if (args.action === 'migrate_deploy') cmd += 'migrate deploy';
+        const result = await getClient(args.connectionName).executeCommand(cmd, true);
+        return { content: [{ type: 'text', text: `Prisma ${args.action}:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'manage_env_file': {
+        const args = z.object({ action: z.enum(['read', 'update']), path: z.string(), key: z.string().optional(), value: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'read') {
+            cmd = `cat "${args.path}" | grep -v '^#' | grep '=' | awk -F '=' '{print "\""$1"\": \""$2"\","}' | sed '$ s/,$//' | sed '1 i\{' | sed '$ a\}'`;
+        } else if (args.action === 'update') {
+            if (!args.key || args.value === undefined) throw new McpError(ErrorCode.InvalidParams, "key and value required for update");
+            cmd = `touch "${args.path}" && sed -i '/^${args.key}=/d' "${args.path}" && echo "${args.key}=\"${args.value.replace(/"/g, '\"')}\"" >> "${args.path}"`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `.env ${args.action}:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'manage_discord': {
+        const args = z.object({ action: z.enum(['validate_token', 'clear_slash_commands']), token: z.string(), appId: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'validate_token') {
+            cmd = `curl -s -H "Authorization: Bot ${args.token}" https://discord.com/api/v10/users/@me`;
+        } else if (args.action === 'clear_slash_commands') {
+            if (!args.appId) throw new McpError(ErrorCode.InvalidParams, "appId required for clear_slash_commands");
+            cmd = `curl -s -X PUT -H "Authorization: Bot ${args.token}" -H "Content-Type: application/json" -d '[]' https://discord.com/api/v10/applications/${args.appId}/commands`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Discord API ${args.action}:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
       default:
+
+
 
 
 
