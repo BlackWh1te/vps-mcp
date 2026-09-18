@@ -359,7 +359,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', enum: ['list', 'start', 'stop', 'restart', 'logs', 'inspect'] },
+            action: { type: 'string', enum: ['list', 'start', 'stop', 'restart', 'logs', 'inspect', 'stats', 'compose_up', 'compose_down'] },
             containerId: { type: 'string', description: 'Container ID or Name (required for all actions except list)' },
             ...connectionProp
           },
@@ -372,7 +372,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', enum: ['list_packages', 'create_venv', 'run_script'] },
+            action: { type: 'string', enum: ['list_packages', 'create_venv', 'run_script', 'install_requirements'] },
             target: { type: 'string', description: 'Path to venv (for list/create) or script (for run)' },
             ...connectionProp
           },
@@ -503,7 +503,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', enum: ['test', 'reload', 'restart', 'status'] },
+            action: { type: 'string', enum: ['test', 'reload', 'restart', 'status', 'enable_site', 'disable_site'] },
+            site: { type: 'string', description: 'Site configuration filename (for enable/disable)' },
             connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
           },
           required: ['action']
@@ -531,6 +532,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             service: { type: 'string', description: 'Service name (e.g., nginx, docker). Leave empty for system logs.' },
             lines: { type: 'number', description: 'Number of lines to fetch (default 100)' },
+            filter: { type: 'string', description: 'Grep string to filter logs' },
             connectionName: { type: 'string', description: 'Name of the connection to use (defaults to "default")' }
           }
         }
@@ -1033,26 +1035,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_processes': {
-        const args = z.object({ sortBy: z.enum(['cpu', 'mem']).default('cpu'), limit: z.number().default(20), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ sortBy: z.enum(['cpu', 'mem']).default('cpu'), limit: z.number().default(20), filter: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         const sortFlag = args.sortBy === 'cpu' ? '-%cpu' : '-%mem';
-        const cmd = `ps -eo pid,ppid,user,%cpu,%mem,start,time,command --sort=${sortFlag} | head -n ${args.limit + 1}`;
+        let cmd = `ps -eo pid,ppid,user,%cpu,%mem,start,time,command --sort=${sortFlag}`;
+        if (args.filter) cmd += ` | grep -i "${args.filter}"`;
+        cmd += ` | head -n ${args.limit + 1}`;
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: result.stdout || result.stderr }] };
       }
 
       case 'manage_docker': {
-        const args = z.object({ action: z.enum(['list', 'start', 'stop', 'restart', 'logs', 'inspect']), containerId: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ action: z.enum(['list', 'start', 'stop', 'restart', 'logs', 'inspect', 'stats', 'compose_up', 'compose_down']), containerId: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = args.action === 'list' ? `docker ps -a` : `docker ${args.action === 'logs' ? 'logs --tail 100' : args.action} ${args.containerId}`;
+        if (args.action === 'compose_up') cmd = `cd "${args.containerId}" && docker-compose up -d`;
+        if (args.action === 'compose_down') cmd = `cd "${args.containerId}" && docker-compose down`;
+        if (args.action === 'stats') cmd = `docker stats --no-stream ${args.containerId || ''}`;
         const result = await getClient(args.connectionName).executeCommand(`sudo ${cmd}`, true);
         return { content: [{ type: 'text', text: `Docker ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
       }
 
       case 'manage_python': {
-        const args = z.object({ action: z.enum(['list_packages', 'create_venv', 'run_script']), target: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ action: z.enum(['list_packages', 'create_venv', 'run_script', 'install_requirements']), target: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
         if (args.action === 'list_packages') cmd = `source ${args.target}/bin/activate && pip freeze`;
         else if (args.action === 'create_venv') cmd = `python3 -m venv ${args.target}`;
         else if (args.action === 'run_script') cmd = `python3 ${args.target}`;
+        else if (args.action === 'install_requirements') cmd = `source ${args.target}/bin/activate && pip install -r requirements.txt`;
         const result = await getClient(args.connectionName).executeCommand(cmd, true);
         return { content: [{ type: 'text', text: `Python ${args.action} output:\n\n${result.stdout}\n${result.stderr}` }] };
       }
@@ -1179,10 +1187,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'manage_nginx': {
-        const args = z.object({ action: z.enum(['test', 'reload', 'restart', 'status']), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ action: z.enum(['test', 'reload', 'restart', 'status', 'enable_site', 'disable_site']), site: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
         if (args.action === 'test') cmd = `sudo nginx -t`;
-        else cmd = `sudo systemctl ${args.action} nginx`;
+        else if (['reload', 'restart', 'status'].includes(args.action)) cmd = `sudo systemctl ${args.action} nginx`;
+        else if (args.action === 'enable_site') cmd = `sudo ln -s /etc/nginx/sites-available/${args.site} /etc/nginx/sites-enabled/`;
+        else if (args.action === 'disable_site') cmd = `sudo rm -f /etc/nginx/sites-enabled/${args.site}`;
         const result = await getClient(args.connectionName).executeCommand(cmd, true);
         return { content: [{ type: 'text', text: `NGINX ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
       }
@@ -1201,9 +1211,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'read_system_logs': {
-        const args = z.object({ service: z.string().optional(), lines: z.number().default(100), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const args = z.object({ service: z.string().optional(), lines: z.number().default(100), filter: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = `sudo journalctl -n ${args.lines} --no-pager`;
         if (args.service) cmd += ` -u ${args.service}`;
+        if (args.filter) cmd += ` | grep -i "${args.filter}"`;
         const result = await getClient(args.connectionName).executeCommand(cmd, true);
         return { content: [{ type: 'text', text: `System Logs:\n\n${result.stdout}\n${result.stderr}` }] };
       }
@@ -1227,9 +1238,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const args = z.object({ action: z.enum(['compress_zip', 'extract_zip', 'compress_tar', 'extract_tar']), target: z.string(), source: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
         let cmd = '';
         if (args.action === 'compress_zip') cmd = `zip -r "${args.target}" "${args.source}"`;
-        else if (args.action === 'extract_zip') cmd = `unzip "${args.target}" -d "${args.source}"`;
+        else if (args.action === 'extract_zip') cmd = `mkdir -p "${args.source}" && unzip "${args.target}" -d "${args.source}"`;
         else if (args.action === 'compress_tar') cmd = `tar -czvf "${args.target}" -C "${args.source}" .`;
-        else if (args.action === 'extract_tar') cmd = `tar -xzvf "${args.target}" -C "${args.source}"`;
+        else if (args.action === 'extract_tar') cmd = `mkdir -p "${args.source}" && tar -xzvf "${args.target}" -C "${args.source}"`;
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Archive ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
       }
@@ -1320,7 +1331,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'test_http_api': {
         const args = z.object({ method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']), url: z.string(), headers: z.string().optional(), body: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
-        let cmd = `curl -s -w "\nHTTP_STATUS:%{http_code}" -X ${args.method} "${args.url}"`;
+        let cmd = `curl --max-time 15 -s -w "\nHTTP_STATUS:%{http_code}" -X ${args.method} "${args.url}"`;
         
         if (args.headers) {
             try {
