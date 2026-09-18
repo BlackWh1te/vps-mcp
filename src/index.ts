@@ -7,6 +7,12 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+
+function escapeShellArg(arg: string): string {
+    if (!arg) return "''";
+    return "'" + arg.replace(/'/g, "'\\''") + "'";
+}
+
 import dotenv from 'dotenv';
 import { SshClient } from './ssh.js';
 
@@ -1303,7 +1309,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             else args.query = "SELECT type, name, sql FROM sqlite_master WHERE type='table';";
         }
         if (!args.query) throw new McpError(ErrorCode.InvalidParams, "query is required if action is query");
-        const safeQuery = args.query.replace(/"/g, '\\"');
+        const safeQuery = escapeShellArg(args.query);
         let cmd = '';
         if (args.dbType === 'mysql') {
             const u = args.user ? `-u ${args.user}` : '';
