@@ -1,15 +1,15 @@
-# VPS MCP Server (v6.0.0 - Ultimate Edition)
+# VPS MCP Server (v7.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
-What started as a simple SSH wrapper has evolved into a **fully-fledged Systems Administration & Developer Operations Suite**.
+What started as a simple SSH wrapper has evolved into a **fully-fledged Systems Administration, Developer Operations & AI Tooling Suite**.
 
 ## 🌟 Key Features
 
 - **Multi-Server Orchestration**: Connect to multiple servers simultaneously (e.g., DB Server, Web Server) and route commands natively.
 - **Native SFTP Tooling**: Bypass clunky bash commands for file transfers. Supports deep SFTP operations like Posix renames, symlinks, truncation, permissions, and local <-> remote transfers.
 - **Paramiko-Equivalent Functionality**: Features advanced SSH protocol capabilities including local port forwarding, Agent Forwarding, and interactive PTY allocation.
-- **Developer-Ready Suites**: Natively manage Git, Docker, Node.js (NVM/NPM/PM2), Python (Venv/PyTest), and SQL Databases securely via structured schemas.
+- **Developer-Ready Suites**: Natively manage Git, Docker, Node.js (NVM/NPM/PM2), Python (Venv/PyTest), SQL Databases, and Local AI (Ollama) securely via structured schemas.
 
 ---
 
@@ -64,6 +64,11 @@ All tools support an optional `connectionName` parameter to route commands when 
 - **`manage_pm2`**: Manage Node daemon processes via PM2. Start, stop, list, monitor logs, and save states.
 - **`manage_python`**: Manage virtual environments, list pip packages, and run python scripts cleanly.
 - **`manage_pytest`**: Orchestrate test suites. Includes automatic dependency installation (`pytest-cov`), targeted test running, and coverage report generation inside your specific virtual environments.
+
+### 🤖 8. AI & API Testing Suite (NEW!)
+- **`test_http_api`**: A built-in Postman equivalent! Natively execute API requests (`GET`, `POST`, `PUT`, `DELETE`) from the VPS. Perfect for testing internal app APIs, hitting LLM endpoints (OpenAI, Claude, Hermes), and debugging webhooks.
+- **`manage_ollama`**: Spin up local AI directly on your VPS! Natively install Ollama, pull models (like `hermes`, `llama3`), run prompts, and manage the Ollama systemd server.
+- **`benchmark_api`**: Load test your applications seamlessly using Apache Benchmark (`ab`). Pass concurrency and request counts to instantly gauge endpoint performance under load.
 
 ---
 

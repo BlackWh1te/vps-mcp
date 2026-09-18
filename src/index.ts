@@ -15,7 +15,7 @@ dotenv.config();
 const server = new Server(
   {
     name: 'vps-mcp',
-    version: '6.0.0',
+    version: '7.0.0',
   },
   {
     capabilities: {
@@ -623,7 +623,52 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['dbType', 'dbName', 'outputFile']
         }
       }
+
+      ,{
+        name: 'test_http_api',
+        description: 'Test HTTP APIs from the VPS (like Postman/cURL). Useful for testing LLM endpoints (OpenAI, Claude, Hermes) or your own app APIs.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] },
+            url: { type: 'string' },
+            headers: { type: 'string', description: 'JSON string of headers, e.g., {"Authorization": "Bearer ...", "Content-Type": "application/json"}' },
+            body: { type: 'string', description: 'JSON string of the request body' },
+            connectionName: { type: 'string' }
+          },
+          required: ['method', 'url']
+        }
+      },
+      {
+        name: 'manage_ollama',
+        description: 'Manage Ollama to run local AI models (like Hermes, Llama) on the VPS.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['install', 'start_server', 'pull_model', 'list_models', 'run_prompt'] },
+            model: { type: 'string', description: 'Model name (e.g., "hermes", "llama3")' },
+            prompt: { type: 'string', description: 'Prompt text for run_prompt' },
+            connectionName: { type: 'string' }
+          },
+          required: ['action']
+        }
+      },
+      {
+        name: 'benchmark_api',
+        description: 'Load test an API endpoint using Apache Benchmark (ab).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            url: { type: 'string' },
+            requests: { type: 'number', description: 'Total number of requests to perform' },
+            concurrency: { type: 'number', description: 'Number of multiple requests to make at a time' },
+            connectionName: { type: 'string' }
+          },
+          required: ['url', 'requests', 'concurrency']
+        }
+      }
     ],
+
 
 
 
@@ -1121,7 +1166,55 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await getClient(args.connectionName).executeCommand(cmd, false);
         return { content: [{ type: 'text', text: `Database Dump:\n\n${result.stdout || 'Successfully dumped ' + args.dbName + ' to ' + args.outputFile}\n${result.stderr}` }] };
       }
+
+      case 'test_http_api': {
+        const args = z.object({ method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']), url: z.string(), headers: z.string().optional(), body: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = `curl -s -w "\nHTTP_STATUS:%{http_code}" -X ${args.method} "${args.url}"`;
+        
+        if (args.headers) {
+            try {
+                const hdrs = JSON.parse(args.headers);
+                for (const [k, v] of Object.entries(hdrs)) {
+                    cmd += ` -H "${k}: ${v}"`;
+                }
+            } catch(e) {}
+        }
+        
+        if (args.body) {
+            cmd += ` -d '${args.body.replace(/'/g, "'\\''")}'`;
+        }
+        
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `API Response:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_ollama': {
+        const args = z.object({ action: z.enum(['install', 'start_server', 'pull_model', 'list_models', 'run_prompt']), model: z.string().optional(), prompt: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        
+        if (args.action === 'install') cmd = `curl -fsSL https://ollama.com/install.sh | sh`;
+        else if (args.action === 'start_server') cmd = `sudo systemctl start ollama`;
+        else if (args.action === 'list_models') cmd = `ollama list`;
+        else if (args.action === 'pull_model') {
+            if (!args.model) throw new McpError(ErrorCode.InvalidParams, "model required");
+            cmd = `ollama pull ${args.model}`;
+        } else if (args.action === 'run_prompt') {
+            if (!args.model || !args.prompt) throw new McpError(ErrorCode.InvalidParams, "model and prompt required");
+            cmd = `ollama run ${args.model} "${args.prompt.replace(/"/g, '\\"')}"`;
+        }
+        
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Ollama ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'benchmark_api': {
+        const args = z.object({ url: z.string(), requests: z.number(), concurrency: z.number(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = `ab -n ${args.requests} -c ${args.concurrency} "${args.url}"`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Benchmark Results:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
       default:
+
 
 
 
