@@ -1,4 +1,4 @@
-# VPS MCP Server (v20.0.0 - Ultimate Edition)
+# VPS MCP Server (v21.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -73,6 +73,10 @@ px prettier --write ..
 - **nalyze_sockets**: Drops down to lsof and ss to map exactly which process is holding which port, preventing hidden port conflicts.
 - **udit_system_security**: Need forensics? Scan for rootkits via chkrootkit, parse raw kernel OOM (Out-of-Memory) kills from the dmesg ring buffer, or track raw failed SSH login attempts in /var/log/auth.log.
 - **docker_exec**: Go beyond starting/stopping containers—execute raw commands directly *inside* isolated Docker environments.
+
+### 🎮🤖 21. The Gaming & AI Integration Suite (NEW!)
+- **manage_rcon**: Administer remote game servers (Minecraft, Rust, Source Engine, Palworld) directly via RCON.
+- **	est_llm_api**: Verify local or remote LLM endpoints (like vLLM, Ollama, LMStudio) by testing their OpenAI-compatible /v1/chat/completions API endpoints with dynamic base URLs.
 
 ---
 

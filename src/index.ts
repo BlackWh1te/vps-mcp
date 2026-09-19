@@ -403,6 +403,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
 
       
+        
+        // --- BRAND NEW: GAMING & AI INTEGRATION SUITE ---
+        {
+          name: 'manage_rcon',
+          description: 'Gaming Suite: Execute RCON commands on remote game servers (Minecraft, Source, Rust, Palworld). Requires mcrcon to be installed on the VPS.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              host: { type: 'string', description: 'RCON host IP (e.g., 127.0.0.1)' },
+              port: { type: 'number', description: 'RCON port (e.g., 25575)' },
+              password: { type: 'string', description: 'RCON password' },
+              command: { type: 'string', description: 'The console command to execute' },
+              ...connectionProp
+            },
+            required: ['host', 'port', 'password', 'command']
+          }
+        },
+        {
+          name: 'test_llm_api',
+          description: 'AI Suite: Test an OpenAI-compatible LLM endpoint (vLLM, Ollama, LMStudio) given a Base URL to verify text generation capabilities.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              baseUrl: { type: 'string', description: 'Base URL (e.g. http://localhost:8000/v1)' },
+              apiKey: { type: 'string', description: 'API Key (optional, defaults to EMPTY)' },
+              model: { type: 'string', description: 'The exact model string to request' },
+              prompt: { type: 'string', description: 'User prompt to test with' },
+              ...connectionProp
+            },
+            required: ['baseUrl', 'model', 'prompt']
+          }
+        },
+
         // --- BRAND NEW: DEEP KERNEL & FORENSICS SUITE ---
         {
           name: 'trace_process',
@@ -1495,6 +1528,28 @@ ${result.stderr}` }] };
 
 ${result.stdout}
 ${result.stderr}` }] };
+      }
+
+      
+      case 'manage_rcon': {
+        const args = z.object({ host: z.string(), port: z.number(), password: z.string(), command: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = `if ! command -v mcrcon >/dev/null 2>&1; then echo "mcrcon is not installed. Please install it first (e.g., sudo apt install mcrcon)."; exit 1; fi; mcrcon -H ${escapeShellArg(args.host)} -P ${args.port} -p ${escapeShellArg(args.password)} ${escapeShellArg(args.command)}`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `RCON Output:
+
+${result.stdout}
+${result.stderr}` }] };
+      }
+
+      case 'test_llm_api': {
+        const args = z.object({ baseUrl: z.string(), apiKey: z.string().default('EMPTY'), model: z.string(), prompt: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const payload = JSON.stringify({ model: args.model, messages: [{ role: 'user', content: args.prompt }], max_tokens: 100 });
+        const cmd = `curl -s -X POST ${escapeShellArg(args.baseUrl + '/chat/completions')} -H "Content-Type: application/json" -H "Authorization: Bearer " + escapeShellArg(args.apiKey) + " -d ${escapeShellArg(payload)}`;
+        // Wait, the string concat above was slightly messy in backticks.
+        // Let's format it correctly using bash literal concat:
+        const cmdClean = `curl -s --max-time 30 -X POST ${escapeShellArg(args.baseUrl + '/chat/completions')} -H "Content-Type: application/json" -H ${escapeShellArg("Authorization: Bearer " + args.apiKey)} -d ${escapeShellArg(payload)}`;
+        const result = await getClient(args.connectionName).executeCommand(cmdClean, false);
+        return { content: [{ type: 'text', text: `LLM API Response:\n\n${result.stdout}\n${result.stderr}` }] };
       }
 
       // --- NODE.JS / DEVELOPER SUITE ---
