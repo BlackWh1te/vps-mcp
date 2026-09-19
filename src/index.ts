@@ -404,6 +404,93 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
       
         
+        
+        // --- BRAND NEW: ENTERPRISE SRE & AI SKILLS SUITE ---
+        {
+          name: 'manage_volumes',
+          description: 'Enterprise SRE: Manage block storage, mount/unmount volumes, and list block devices (lsblk, mount).',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              action: { type: 'string', enum: ['list', 'mount', 'unmount'] },
+              device: { type: 'string', description: 'Device path (e.g., /dev/sdb1)' },
+              mountPoint: { type: 'string', description: 'Target mount directory' },
+              ...connectionProp
+            },
+            required: ['action']
+          }
+        },
+        {
+          name: 'analyze_binary',
+          description: 'Enterprise SRE: Deep binary analysis to find missing shared libraries (ldd) or extract text (strings).',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              action: { type: 'string', enum: ['ldd', 'strings'] },
+              path: { type: 'string', description: 'Path to the binary or shared object' },
+              ...connectionProp
+            },
+            required: ['action', 'path']
+          }
+        },
+        {
+          name: 'query_json_logs',
+          description: 'Enterprise SRE: Query and filter massive JSON log files instantly using jq.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'Path to the JSON log file' },
+              jqFilter: { type: 'string', description: 'jq filter string (e.g., ". | select(.level == \"error\")")' },
+              tailLines: { type: 'number', description: 'Number of lines to read from the end of the file (default 1000)' },
+              ...connectionProp
+            },
+            required: ['path', 'jqFilter']
+          }
+        },
+        {
+          name: 'diagnose_dns',
+          description: 'Enterprise SRE: Advanced DNS queries using dig to check propagation and records.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              domain: { type: 'string', description: 'Domain name to query' },
+              recordType: { type: 'string', enum: ['A', 'TXT', 'MX', 'CNAME', 'NS', 'ANY'] },
+              resolver: { type: 'string', description: 'Optional DNS resolver (e.g., @8.8.8.8)' },
+              ...connectionProp
+            },
+            required: ['domain', 'recordType']
+          }
+        },
+        {
+          name: 'manage_kubernetes',
+          description: 'Enterprise SRE: Native kubectl integration to manage Kubernetes clusters.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              action: { type: 'string', enum: ['get_pods', 'get_deployments', 'get_services', 'describe_pod', 'logs'] },
+              namespace: { type: 'string', description: 'K8s namespace (default: default)' },
+              resourceName: { type: 'string', description: 'Name of the pod/resource (required for describe/logs)' },
+              ...connectionProp
+            },
+            required: ['action']
+          }
+        },
+        {
+          name: 'manage_vps_skills',
+          description: 'AI Skills Manager: Store, list, and execute custom bash/python scripts persistently on the VPS. Allows the AI to build its own permanent toolkit on the server.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              action: { type: 'string', enum: ['list', 'create', 'read', 'execute', 'delete'] },
+              skillName: { type: 'string', description: 'Name of the skill/script (e.g., "backup_db")' },
+              scriptContent: { type: 'string', description: 'Raw bash/python code to save (for create)' },
+              executeArgs: { type: 'string', description: 'Arguments to pass to the script (for execute)' },
+              ...connectionProp
+            },
+            required: ['action']
+          }
+        },
+
         // --- BRAND NEW: GAMING & AI INTEGRATION SUITE ---
         {
           name: 'manage_rcon',
@@ -1550,6 +1637,93 @@ ${result.stderr}` }] };
         const cmdClean = `curl -s --max-time 30 -X POST ${escapeShellArg(args.baseUrl + '/chat/completions')} -H "Content-Type: application/json" -H ${escapeShellArg("Authorization: Bearer " + args.apiKey)} -d ${escapeShellArg(payload)}`;
         const result = await getClient(args.connectionName).executeCommand(cmdClean, false);
         return { content: [{ type: 'text', text: `LLM API Response:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      
+      case 'manage_volumes': {
+        const args = z.object({ action: z.enum(['list', 'mount', 'unmount']), device: z.string().optional(), mountPoint: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        let cmd = '';
+        if (args.action === 'list') cmd = 'lsblk -f -J || lsblk -f';
+        else if (args.action === 'mount') {
+          if (!args.device || !args.mountPoint) throw new McpError(ErrorCode.InvalidParams, "device and mountPoint required");
+          cmd = `sudo mkdir -p ${escapeShellArg(args.mountPoint)} && sudo mount ${escapeShellArg(args.device)} ${escapeShellArg(args.mountPoint)}`;
+        } else if (args.action === 'unmount') {
+          if (!args.mountPoint) throw new McpError(ErrorCode.InvalidParams, "mountPoint required");
+          cmd = `sudo umount ${escapeShellArg(args.mountPoint)}`;
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Volume ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'analyze_binary': {
+        const args = z.object({ action: z.enum(['ldd', 'strings']), path: z.string(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const cmd = args.action === 'ldd' ? `ldd ${escapeShellArg(args.path)}` : `strings ${escapeShellArg(args.path)} | head -n 200`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `Binary Analysis (${args.action}):\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'query_json_logs': {
+        const args = z.object({ path: z.string(), jqFilter: z.string(), tailLines: z.number().default(1000), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const jqCheck = `if ! command -v jq >/dev/null 2>&1; then echo "jq not installed. Run sudo apt install jq"; exit 1; fi; `;
+        const cmd = `${jqCheck} tail -n ${args.tailLines} ${escapeShellArg(args.path)} | jq -c ${escapeShellArg(args.jqFilter)} | head -n 100`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `JSON Log Query Results:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'diagnose_dns': {
+        const args = z.object({ domain: z.string(), recordType: z.enum(['A', 'TXT', 'MX', 'CNAME', 'NS', 'ANY']), resolver: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const res = args.resolver ? escapeShellArg(args.resolver) : '';
+        const cmd = `dig ${res} ${escapeShellArg(args.domain)} ${args.recordType} +short`;
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `DNS ${args.recordType} Records for ${args.domain}:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_kubernetes': {
+        const args = z.object({ action: z.enum(['get_pods', 'get_deployments', 'get_services', 'describe_pod', 'logs']), namespace: z.string().default('default'), resourceName: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const ns = `-n ${escapeShellArg(args.namespace)}`;
+        let cmd = '';
+        if (args.action === 'get_pods') cmd = `kubectl get pods ${ns}`;
+        else if (args.action === 'get_deployments') cmd = `kubectl get deployments ${ns}`;
+        else if (args.action === 'get_services') cmd = `kubectl get svc ${ns}`;
+        else if (args.action === 'describe_pod') {
+          if (!args.resourceName) throw new McpError(ErrorCode.InvalidParams, "resourceName required for describe_pod");
+          cmd = `kubectl describe pod ${escapeShellArg(args.resourceName)} ${ns}`;
+        } else if (args.action === 'logs') {
+          if (!args.resourceName) throw new McpError(ErrorCode.InvalidParams, "resourceName required for logs");
+          cmd = `kubectl logs ${escapeShellArg(args.resourceName)} ${ns} --tail=100`;
+        }
+        const k8sCmd = `if ! command -v kubectl >/dev/null 2>&1; then echo "kubectl not installed or not in PATH."; exit 1; fi; ${cmd}`;
+        const result = await getClient(args.connectionName).executeCommand(k8sCmd, false);
+        return { content: [{ type: 'text', text: `Kubernetes ${args.action}:\n\n${result.stdout}\n${result.stderr}` }] };
+      }
+
+      case 'manage_vps_skills': {
+        const args = z.object({ action: z.enum(['list', 'create', 'read', 'execute', 'delete']), skillName: z.string().optional(), scriptContent: z.string().optional(), executeArgs: z.string().optional(), connectionName: z.string().optional() }).parse(request.params.arguments);
+        const skillsDir = '~/.vps-mcp-skills';
+        let cmd = `mkdir -p ${skillsDir} && `;
+        
+        if (args.action === 'list') {
+          cmd += `ls -la ${skillsDir}`;
+        } else {
+          if (!args.skillName) throw new McpError(ErrorCode.InvalidParams, "skillName is required");
+          if (!/^[a-zA-Z0-9_\-]+$/.test(args.skillName)) throw new McpError(ErrorCode.InvalidParams, "skillName must be alphanumeric, dashes, and underscores only");
+          const path = `${skillsDir}/${args.skillName}.sh`;
+          
+          if (args.action === 'create') {
+            if (!args.scriptContent) throw new McpError(ErrorCode.InvalidParams, "scriptContent required for create");
+            const b64 = Buffer.from(args.scriptContent).toString('base64');
+            cmd += `echo '${b64}' | base64 -d > ${path} && chmod +x ${path}`;
+          } else if (args.action === 'read') {
+            cmd += `cat ${path}`;
+          } else if (args.action === 'execute') {
+            const exArgs = args.executeArgs ? args.executeArgs : '';
+            cmd += `bash ${path} ${exArgs}`;
+          } else if (args.action === 'delete') {
+            cmd += `rm -f ${path}`;
+          }
+        }
+        const result = await getClient(args.connectionName).executeCommand(cmd, false);
+        return { content: [{ type: 'text', text: `VPS Skills Manager (${args.action}):\n\n${result.stdout}\n${result.stderr}` }] };
       }
 
       // --- NODE.JS / DEVELOPER SUITE ---

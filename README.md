@@ -1,4 +1,4 @@
-# VPS MCP Server (v21.0.0 - Ultimate Edition)
+# VPS MCP Server (v22.0.0 - Ultimate Edition)
 
 An advanced Model Context Protocol (MCP) server that empowers AI agents to seamlessly orchestrate, manage, and deploy to Virtual Private Servers (VPS) via SSH.
 
@@ -77,6 +77,14 @@ px prettier --write ..
 ### 🎮🤖 21. The Gaming & AI Integration Suite (NEW!)
 - **manage_rcon**: Administer remote game servers (Minecraft, Rust, Source Engine, Palworld) directly via RCON.
 - **	est_llm_api**: Verify local or remote LLM endpoints (like vLLM, Ollama, LMStudio) by testing their OpenAI-compatible /v1/chat/completions API endpoints with dynamic base URLs.
+
+### 🏢 22. The Enterprise SRE & AI Skills Suite (NEW!)
+- **manage_volumes**: Native block storage mapping. List lsblk, mount, and unmount drives and block devices directly.
+- **nalyze_binary**: If a daemon won't start, use ldd to hunt down missing .so shared libraries, or strings to reverse engineer broken binaries.
+- **query_json_logs**: Natively run jq filters across massive 10GB JSON log files without crashing the LLM context window.
+- **diagnose_dns**: Native dig integration to diagnose A, TXT, MX, and CNAME propagation across global resolvers.
+- **manage_kubernetes**: Native kubectl integration. Get pods, deployments, services, describe resources, and tail pod logs natively.
+- **manage_vps_skills**: The ultimate AI tool. Allows the AI to write, save, list, and execute permanent custom bash/python scripts persistently in ~/.vps-mcp-skills/. The AI can now build its own permanent server-side toolset!
 
 ---
 
